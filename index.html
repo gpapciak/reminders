@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mom's Board</title>
+<style>
+  /* ============================================================
+     Mom's Cognitive Support Display — V1 (static mock data)
+     Designed at exactly 1280 x 720. The .stage is scaled to fit
+     whatever viewport Silk gives us, so the layout is PIXEL-
+     IDENTICAL on the 24" table TV and (later) the other two TVs.
+     No scrolling, no interaction required.
+     ============================================================ */
+
+  :root{
+    --paper:#f6f2e9; --ink:#23201b; --muted:#7a7264; --line:#e2dccd; --card:#fffdf8;
+    --ok-bg:#e3f1e4;   --ok-ink:#245c33;  --ok-edge:#4f9c63;   /* medicine taken   */
+    --soon-bg:#fbeecf; --soon-ink:#6b4a12; --soon-edge:#d69a2c; /* needs action     */
+    --note-ink:#2b4a66;                                        /* family / neutral */
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{
+    width:100%; height:100%; background:#000; overflow:hidden;
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  #frame{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+
+  .stage{
+    width:1280px; height:720px; transform-origin:center center;
+    background:var(--paper); color:var(--ink);
+    display:flex; flex-direction:column; padding:26px 38px 22px; gap:16px;
+    overflow:hidden;
+  }
+
+  /* Header — orientation, always visible */
+  .header{ display:flex; align-items:flex-end; justify-content:space-between; }
+  .greeting{ font-size:46px; font-weight:800; letter-spacing:-0.5px; line-height:1; }
+  .datestack{ text-align:right; }
+  .clock{ font-size:58px; font-weight:800; line-height:0.9; font-variant-numeric:tabular-nums; }
+  .date{ font-size:28px; font-weight:600; color:var(--muted); margin-top:6px; }
+
+  /* Medication — safety-critical, most prominent */
+  .med{
+    border-radius:16px; padding:16px 28px; display:flex; align-items:center; gap:24px;
+    border-left:12px solid var(--soon-edge); background:var(--soon-bg); color:var(--soon-ink);
+    overflow:hidden;
+  }
+  .med .label{ font-size:22px; font-weight:800; letter-spacing:2px; opacity:.85; white-space:nowrap; }
+  .med .body{ font-size:38px; font-weight:700; line-height:1.08; }
+  .med.ok      { background:var(--ok-bg);   color:var(--ok-ink);   border-color:var(--ok-edge); }
+  .med.soon    { background:var(--soon-bg); color:var(--soon-ink); border-color:var(--soon-edge); }
+  .med.unknown { background:#efeade;        color:#5c5445;         border-color:#b7ac93; }
+
+  /* Two-column body */
+  .grid{ flex:1; display:grid; grid-template-columns:1fr 1fr; gap:16px; min-height:0; overflow:hidden; }
+  .col{ display:flex; flex-direction:column; gap:16px; min-height:0; overflow:hidden; }
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:16px 24px; display:flex; flex-direction:column; overflow:hidden;
+  }
+  .card.grow{ flex:1; min-height:0; }
+  .cap{ font-size:21px; font-weight:800; letter-spacing:2px; color:var(--muted); margin-bottom:10px; }
+
+  .next-what{ font-size:46px; font-weight:800; line-height:1.02; }
+  .next-when{ font-size:34px; font-weight:700; color:var(--soon-ink); margin-top:6px; }
+  .important{ font-size:36px; font-weight:600; line-height:1.15; }
+
+  .todo{ list-style:none; display:flex; flex-direction:column; gap:10px; }
+  .todo li{ font-size:26px; font-weight:600; display:flex; align-items:center; gap:16px; }
+  .box{ font-size:26px; width:34px; text-align:center; }
+  .todo li.done{ color:var(--ok-ink); }
+  .todo li.done .box{ color:var(--ok-edge); }
+  .todo li.open .box{ color:var(--muted); }
+
+  .fam{ list-style:none; display:flex; flex-direction:column; gap:10px; }
+  .fam li{ font-size:25px; font-weight:600; line-height:1.15; color:var(--note-ink); }
+
+  .reassure{ text-align:center; font-size:34px; font-weight:700; color:var(--muted); padding-top:2px; }
+</style>
+</head>
+<body>
+  <div id="frame">
+    <div class="stage">
+
+      <div class="header">
+        <div class="greeting" id="greeting">Good morning, Mom</div>
+        <div class="datestack">
+          <div class="clock" id="clock">—</div>
+          <div class="date" id="date">—</div>
+        </div>
+      </div>
+
+      <div class="med" id="med">
+        <div class="label">MEDICINE</div>
+        <div class="body" id="med-body">—</div>
+      </div>
+
+      <div class="grid">
+        <div class="col">
+          <div class="card grow">
+            <div class="cap">NEXT</div>
+            <div class="next-what" id="next-what">—</div>
+            <div class="next-when" id="next-when">—</div>
+          </div>
+          <div class="card">
+            <div class="cap">IMPORTANT</div>
+            <div class="important" id="important">—</div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card">
+            <div class="cap">TODAY</div>
+            <ul class="todo" id="todo"></ul>
+          </div>
+          <div class="card grow">
+            <div class="cap">FAMILY</div>
+            <ul class="fam" id="fam"></ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="reassure" id="reassure">Everything is okay. You are home.</div>
+
+    </div>
+  </div>
+
+<script>
+/* ================================================================
+   1. MOCK DATA  — stand-in for one row of the Google Sheet.
+   Wiring step: replace DATA with a fetch() from your Apps Script
+   endpoint, pick the row matching today's LA date, call render().
+   ================================================================ */
+const DATA = {
+  greeting: null,                       // null -> auto morning/afternoon/evening
+
+  // medication.state drives color & safety:
+  //   'taken' -> green    | 'todo'/'hold' -> amber | else -> neutral SAFE fallback
+  medication: {
+    state: 'taken',
+    text:  "Taken at 8:20 AM — please don't take any more today."
+  },
+
+  next:      { what:'Susan calls', when:'2:00 PM' },
+  important: 'Lunch is in the refrigerator.',
+  today: [
+    { label:'Breakfast',        done:true  },
+    { label:'Morning medicine', done:true  },
+    { label:'Lunch',            done:false },
+    { label:'Dinner',           done:false },
+  ],
+  family: [
+    'Susan called at 11:20 AM.',
+    'Greg calls tonight at 7:00.',
+    'Kat visits tomorrow.',
+  ],
+  reassure: 'Everything is okay. You are home.',
+};
+
+/* 2. TIME — always America/Los_Angeles (Mom's timezone) */
+const TZ='America/Los_Angeles';
+const fmtTime=new Intl.DateTimeFormat('en-US',{timeZone:TZ,hour:'numeric',minute:'2-digit'});
+const fmtDate=new Intl.DateTimeFormat('en-US',{timeZone:TZ,weekday:'long',month:'long',day:'numeric'});
+const fmtHour=new Intl.DateTimeFormat('en-US',{timeZone:TZ,hour:'numeric',hour12:false});
+function laHour(d){ return Number(fmtHour.format(d)); }
+function autoGreeting(d){ const h=laHour(d); return h<12?'Good morning, Mom':h<17?'Good afternoon, Mom':'Good evening, Mom'; }
+function tick(){
+  const now=new Date();
+  document.getElementById('clock').textContent=fmtTime.format(now);
+  document.getElementById('date').textContent =fmtDate.format(now);
+  document.getElementById('greeting').textContent=DATA.greeting||autoGreeting(now);
+}
+
+/* 3. RENDER — medication fails safe */
+function renderMedication(med){
+  const el=document.getElementById('med'), body=document.getElementById('med-body');
+  const state=med&&med.state;
+  el.classList.remove('ok','soon','unknown');
+  if(state==='taken'){ el.classList.add('ok'); body.textContent=med.text||'Medicine is finished for today.'; }
+  else if(state==='todo'||state==='hold'){ el.classList.add('soon'); body.textContent=med.text||'Please check with family about medicine.'; }
+  else { el.classList.add('unknown'); body.textContent='Please check with family before taking any medicine.'; }
+}
+function render(data){
+  renderMedication(data.medication);
+  document.getElementById('next-what').textContent=(data.next&&data.next.what)||'—';
+  document.getElementById('next-when').textContent=(data.next&&data.next.when)||'';
+  document.getElementById('important').textContent=data.important||'';
+  document.getElementById('reassure').textContent =data.reassure||'Everything is okay. You are home.';
+  const todo=document.getElementById('todo'); todo.innerHTML='';
+  (data.today||[]).forEach(it=>{ const li=document.createElement('li'); li.className=it.done?'done':'open';
+    li.innerHTML='<span class="box">'+(it.done?'✓':'○')+'</span><span>'+it.label+'</span>'; todo.appendChild(li); });
+  const fam=document.getElementById('fam'); fam.innerHTML='';
+  (data.family||[]).forEach(line=>{ const li=document.createElement('li'); li.textContent=line; fam.appendChild(li); });
+}
+
+/* 4. FIT — scale the 1280x720 stage to the real screen */
+function fit(){
+  const stage=document.querySelector('.stage');
+  stage.style.transform='scale('+Math.min(window.innerWidth/1280,window.innerHeight/720)+')';
+}
+
+/* 5. BOOT */
+window.addEventListener('resize',fit);
+fit(); render(DATA); tick();
+setInterval(tick,1000);   // live clock + automatic date rollover at midnight
+
+/* --- Seams for the wiring step (not needed for the static test) ---
+   Data refresh: setInterval(loadData, 3*60*1000)   // fetch sheet every 3 min
+   Full reload : setInterval(()=>location.reload(true), 60*60*1000)
+   loadData(): fetch endpoint (cache-bust with ?t=Date.now()), find the row whose
+   date === today's LA date, render(row). On fetch failure leave the last known
+   GOOD state or fall to the safe 'unknown' message — never invent 'taken'.
+   No row for today -> minimal safe fallback (greeting + date + "No special plans
+   listed yet." + medication 'unknown' + reassurance).
+------------------------------------------------------------------ */
+</script>
+</body>
+</html>
