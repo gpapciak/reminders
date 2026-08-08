@@ -41,6 +41,13 @@
   #frame{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
 
   .stage{
+    /* flex:0 0 auto is load-bearing. #frame is a flex container, and a flex
+       item SHRINKS by default -- so on any viewport narrower than 1280 CSS px
+       the stage was being squashed to fit instead of scaled by the transform,
+       which re-wrapped every line and drove auto-fit to its minimums. The
+       stage must always lay out at exactly 1280x720 and be scaled, never
+       resized. */
+    flex:0 0 auto;
     width:1280px; height:720px; transform-origin:center center;
     background:var(--paper); color:var(--ink);
     display:flex; flex-direction:column; padding:20px 32px 16px; gap:14px;
@@ -70,8 +77,11 @@
     padding:14px 24px 16px; display:flex; flex-direction:column;
     min-height:0; overflow:hidden;
   }
-  #card-today{ flex:3 1 0; }
-  #card-notes{ flex:2 1 0; }
+  /* 5/4 measured as the best split once the standing prompt is in: TODAY
+     gives up 3px (38->35) and NOTES recovers its full 27px ceiling. Going
+     further costs TODAY with nothing left to gain. */
+  #card-today{ flex:5 1 0; }
+  #card-notes{ flex:4 1 0; }
   #card-cal  { flex:1 1 0; }
   .cap{ flex:0 0 auto; font-size:21px; font-weight:800; letter-spacing:2.5px;
         color:var(--muted); margin-bottom:10px; }
@@ -88,6 +98,13 @@
   #card-notes{ --fs:27px; }
   .notes{ list-style:none; display:flex; flex-direction:column; gap:calc(var(--fs)*0.45); }
   .notes li{ font-size:var(--fs); font-weight:600; line-height:1.30; }
+
+  /* Standing prompt: always true, never from the Sheet's daily row. Held
+     apart from the notes above it so a constant is never mistaken for news. */
+  .standing{
+    flex:0 0 auto; margin-top:11px; padding-top:11px; border-top:1px solid var(--line);
+    font-size:21px; font-weight:600; line-height:1.35; color:var(--muted);
+  }
 
   /* ---- CALENDAR: past (✓) → TODAY → upcoming ---- */
   #card-cal{ --fs:29px; }
@@ -131,6 +148,7 @@
           <div class="card" id="card-notes">
             <div class="cap">NOTES</div>
             <div class="body"><ul class="notes" id="notes"></ul></div>
+            <div class="standing" id="standing"></div>
           </div>
         </div>
         <div class="col">
@@ -168,6 +186,8 @@ const DATA = {
   notes: [
     'Greg here for 13 more days. Then Kathy comes. Then Chris.',
   ],
+  /* Constant, not part of the daily row. Same text every day. */
+  standing: 'Feeling hungry? Eat some food. Feeling thirsty? Drink some water. Stay hydrated.',
   calendar: [
     { date:'2026-08-04', what:'Saw Dr. Amal' },
     { date:'2026-08-06', what:'Had PT with Cindy' },
@@ -286,6 +306,12 @@ function render(data){
   const notes=(data.notes||[]).map(n=>String(n||'').trim()).filter(Boolean);
   if(!notes.length){ nl.appendChild(emptyRow('No notes today.')); }
   notes.forEach(n=>{ const li=document.createElement('li'); li.textContent=n; nl.appendChild(li); });
+
+  /* Reserve no space at all when there is no standing prompt. */
+  const st=document.getElementById('standing');
+  const standing=String(data.standing||'').trim();
+  st.textContent=standing;
+  st.style.display=standing?'block':'none';
 
   const cal=document.getElementById('cal'); cal.innerHTML='';
   const win=calendarWindow(data.calendar,todayISO);
