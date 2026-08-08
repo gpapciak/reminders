@@ -6,7 +6,7 @@
 <title>Mom's Board</title>
 <style>
   /* ============================================================
-     Mom's Cognitive Support Display — V2 layout (static mock data)
+     Mom's Cognitive Support Display — V3 (static mock data)
      Designed at exactly 1280 x 720. The .stage is scaled to fit
      whatever viewport Silk gives us, so the layout is PIXEL-
      IDENTICAL on the 24" table TV and (later) the other two TVs.
@@ -15,6 +15,10 @@
      On a non-16:9 window (i.e. any laptop) you WILL see black bars
      at the sides. That is the letterbox, not the layout. On the
      720p TV the ratio matches exactly and it fills the screen.
+
+     TYPE SIZES ARE CEILINGS. Each box declares a --fs and JS steps
+     it down only if the content would otherwise be clipped, so no
+     amount of text typed into the Sheet can break the layout.
      ============================================================ */
 
   :root{
@@ -22,7 +26,7 @@
     --line:#e2dccd; --card:#fffdf8;
     --done:#4f9c63;    --done-ink:#3f6b4b;   /* already happened      */
     --mark:#c08a20;                          /* "today" divider       */
-    --note-ink:#2b4a66;                      /* times / upcoming      */
+    --note-ink:#2b4a66;                      /* numbers / upcoming    */
 
     /* Kept for the medication card if it ever comes back — see notes. */
     --ok-bg:#e3f1e4; --ok-ink:#245c33; --ok-edge:#4f9c63;
@@ -39,55 +43,74 @@
   .stage{
     width:1280px; height:720px; transform-origin:center center;
     background:var(--paper); color:var(--ink);
-    display:flex; flex-direction:column; padding:24px 32px 20px; gap:18px;
+    display:flex; flex-direction:column; padding:20px 32px 16px; gap:14px;
     overflow:hidden;
   }
 
-  /* ---- Header: the single most-asked question, full width ---- */
-  .head{ display:flex; align-items:baseline; justify-content:space-between; gap:28px; }
+  /* ---- Header: the single most-asked question, full width ----
+     line-height 1.25 (not 1.05) so the overflow:hidden needed by the
+     auto-shrink can't clip the descenders in "Today"/"August". */
+  .head{ flex:0 0 auto; height:96px; display:flex; align-items:baseline;
+         justify-content:space-between; gap:26px; }
   .today-is{
-    font-size:54px; font-weight:800; letter-spacing:-0.5px; line-height:1.05;
+    font-size:72px; font-weight:800; letter-spacing:-1px; line-height:1.25;
     white-space:nowrap; overflow:hidden; flex:1 1 auto; min-width:0;
   }
   .clock{
-    flex:0 0 auto; font-size:46px; font-weight:800; line-height:1;
+    flex:0 0 auto; font-size:46px; font-weight:800; line-height:1.25;
     font-variant-numeric:tabular-nums; color:var(--soft); white-space:nowrap;
   }
 
   /* ---- Body: left = today + notes, right = full-height timeline ---- */
-  .grid{ flex:1; display:grid; grid-template-columns:46fr 54fr; gap:18px; min-height:0; overflow:hidden; }
-  .col{ display:flex; flex-direction:column; gap:18px; min-height:0; overflow:hidden; }
+  .grid{ flex:1 1 auto; display:grid; grid-template-columns:46fr 54fr; gap:16px;
+         min-height:0; overflow:hidden; }
+  .col{ display:flex; flex-direction:column; gap:16px; min-height:0; overflow:hidden; }
   .card{
     background:var(--card); border:1px solid var(--line); border-radius:18px;
-    padding:18px 26px; display:flex; flex-direction:column; overflow:hidden;
+    padding:14px 24px 16px; display:flex; flex-direction:column;
+    min-height:0; overflow:hidden;
   }
-  .card.grow{ flex:1; min-height:0; }
-  .cap{ font-size:22px; font-weight:800; letter-spacing:2.5px; color:var(--muted); margin-bottom:14px; }
+  #card-today{ flex:3 1 0; }
+  #card-notes{ flex:2 1 0; }
+  #card-cal  { flex:1 1 0; }
+  .cap{ flex:0 0 auto; font-size:21px; font-weight:800; letter-spacing:2.5px;
+        color:var(--muted); margin-bottom:10px; }
+  .body{ flex:1 1 auto; min-height:0; overflow:hidden; }
 
-  .today-list{ list-style:none; display:flex; flex-direction:column; gap:12px; }
-  .today-list li{ font-size:33px; font-weight:700; line-height:1.15; display:flex; gap:14px; align-items:baseline; }
-  .today-list .t{ color:var(--note-ink); white-space:nowrap; font-variant-numeric:tabular-nums; }
+  /* ---- TODAY ---- */
+  #card-today{ --fs:44px; }
+  .today-list{ list-style:none; display:flex; flex-direction:column; gap:calc(var(--fs)*0.30); }
+  .today-list li{ font-size:var(--fs); font-weight:700; line-height:1.16;
+                  display:flex; gap:calc(var(--fs)*0.30); align-items:baseline; }
+  .today-list .n{ flex:0 0 auto; color:var(--note-ink); font-variant-numeric:tabular-nums; }
 
-  .notes{ list-style:none; display:flex; flex-direction:column; gap:12px; }
-  .notes li{ font-size:28px; font-weight:600; line-height:1.25; }
+  /* ---- NOTES ---- */
+  #card-notes{ --fs:27px; }
+  .notes{ list-style:none; display:flex; flex-direction:column; gap:calc(var(--fs)*0.45); }
+  .notes li{ font-size:var(--fs); font-weight:600; line-height:1.30; }
 
-  /* ---- Timeline: past (✓) → TODAY → upcoming ---- */
-  .cal{ list-style:none; display:flex; flex-direction:column; gap:13px; }
-  .cal li{ display:flex; gap:14px; align-items:baseline; line-height:1.15; }
-  .cal .mark{ flex:0 0 30px; font-size:26px; text-align:center; color:var(--done); }
-  .cal .when{ flex:0 0 172px; font-size:26px; font-weight:700; color:var(--muted); white-space:nowrap; }
-  .cal .what{ flex:1 1 auto; font-size:29px; font-weight:600; }
+  /* ---- CALENDAR: past (✓) → TODAY → upcoming ---- */
+  #card-cal{ --fs:29px; }
+  .cal{ list-style:none; display:flex; flex-direction:column; gap:calc(var(--fs)*0.40); }
+  .cal li{ display:flex; gap:calc(var(--fs)*0.42); align-items:baseline; line-height:1.16; }
+  .cal .mark{ flex:0 0 calc(var(--fs)*0.95); font-size:calc(var(--fs)*0.88);
+              text-align:center; color:var(--done); }
+  .cal .when{ flex:0 0 calc(var(--fs)*6.0); font-size:calc(var(--fs)*0.86);
+              font-weight:700; color:var(--muted); white-space:nowrap; }
+  .cal .what{ flex:1 1 auto; font-size:var(--fs); font-weight:600; }
   .cal li.past .what{ color:var(--done-ink); }
   .cal li.ahead .when{ color:var(--note-ink); }
 
-  .cal li.divider{ align-items:center; gap:14px; margin:3px 0 1px; }
-  .cal li.divider .lbl{ font-size:19px; font-weight:800; letter-spacing:3px; color:var(--mark); }
+  .cal li.divider{ align-items:center; gap:12px; margin:2px 0; }
+  .cal li.divider .lbl{ font-size:calc(var(--fs)*0.62); font-weight:800;
+                        letter-spacing:3px; color:var(--mark); }
   .cal li.divider .rule{ flex:1 1 auto; height:2px; background:var(--line); }
 
-  .empty{ font-size:26px; font-weight:600; color:var(--muted); }
+  .empty{ font-size:var(--fs); font-weight:600; color:var(--muted); }
 
   /* ---- Footer: the reassurance line ---- */
-  .reassure{ text-align:center; font-size:46px; font-weight:700; color:var(--soft); line-height:1.1; }
+  .reassure{ flex:0 0 auto; text-align:center; font-size:46px; font-weight:700;
+             color:var(--soft); line-height:1.25; }
 </style>
 </head>
 <body>
@@ -101,19 +124,19 @@
 
       <div class="grid">
         <div class="col">
-          <div class="card">
+          <div class="card" id="card-today">
             <div class="cap">TODAY</div>
-            <ul class="today-list" id="today-list"></ul>
+            <div class="body"><ul class="today-list" id="today-list"></ul></div>
           </div>
-          <div class="card grow">
+          <div class="card" id="card-notes">
             <div class="cap">NOTES</div>
-            <ul class="notes" id="notes"></ul>
+            <div class="body"><ul class="notes" id="notes"></ul></div>
           </div>
         </div>
         <div class="col">
-          <div class="card grow">
+          <div class="card" id="card-cal">
             <div class="cap">CALENDAR</div>
-            <ul class="cal" id="cal"></ul>
+            <div class="body"><ul class="cal" id="cal"></ul></div>
           </div>
         </div>
       </div>
@@ -131,26 +154,31 @@
      "Days"   one row per date  -> today[] and notes[]
      "Events" one row per event -> calendar[]  (Date | Description)
 
-   Note that calendar entries carry ONLY a date and a description.
-   Whether something has already happened is computed from today's
-   LA date, so nobody has to go back and tick things off.
+   Calendar entries carry ONLY a date and a description. Whether
+   something has already happened is computed from today's LA date,
+   so nobody has to go back and tick things off.
    ================================================================ */
 const DATA = {
   today: [
-    { time:'2:00 PM', what:'Kat visits' },
-    { time:'',        what:'A quiet afternoon at home' },
+    'Researching care options',
+    'OnPoint Credit Union',
+    'Best Buy',
+    'Gratitude',
   ],
   notes: [
-    'Your glasses are on the kitchen table.',
-    'The blue folder has your bank papers in it.',
+    'Greg here for 13 more days. Then Kathy comes. Then Chris.',
   ],
   calendar: [
-    { date:'2026-08-03', what:'Susan called' },
-    { date:'2026-08-05', what:'Greg called in the evening' },
-    { date:'2026-08-06', what:'Kat called' },
-    { date:'2026-08-09', what:'Susan calls at 2:00 PM' },
-    { date:'2026-08-11', what:'Greg visits' },
-    { date:'2026-08-14', what:'Doctor appointment at 10:30' },
+    { date:'2026-08-04', what:'Saw Dr. Amal' },
+    { date:'2026-08-06', what:'Had PT with Cindy' },
+    { date:'2026-08-10', what:'1:30 pm  Dentist – crown' },
+    { date:'2026-08-10', what:'2:30 pm  Realtor – Elaine Simms' },
+    { date:'2026-08-18', what:'1:50 pm  Dr. Amal' },
+    { date:'2026-08-19', what:'Kathy arrives' },
+    { date:'2026-08-19', what:'3:30 pm  PT with Cindy' },
+    { date:'2026-08-27', what:'Pest control follow-up' },
+    { date:'2026-09-02', what:'2:00 pm  Dental cleaning' },
+    { date:'2026-09-17', what:'3:10 pm  Eyehealth NW' },
   ],
   reassure: 'Everything is okay. You are safe and loved.',
 };
@@ -178,7 +206,25 @@ function shiftISO(iso,days){
   return d.toISOString().slice(0,10);
 }
 
-/* 3. RENDER */
+/* 3. AUTO-FIT — every box declares a max type size and shrinks only
+   as far as it must. Layout can never clip and never scrolls. */
+function fitBlock(cardId, listId, max, min){
+  const card=document.getElementById(cardId);
+  const body=card.querySelector('.body');
+  const list=document.getElementById(listId);
+  let s=max;
+  card.style.setProperty('--fs',s+'px');
+  while(s>min && list.scrollHeight>body.clientHeight){
+    s-=1; card.style.setProperty('--fs',s+'px');
+  }
+  return s;
+}
+function fitLine(el,max,min){
+  el.style.fontSize=max+'px';
+  for(let s=max; s>min && el.scrollWidth>el.clientWidth; ){ s-=1; el.style.fontSize=s+'px'; }
+}
+
+/* 4. RENDER */
 
 /* Pick a window around today so the column never overflows: recent past
    above the divider, upcoming below, backfilling whichever side is short. */
@@ -198,22 +244,24 @@ function calendarWindow(items, todayISO){
 }
 
 function whenLabel(iso, todayISO){
-  if(iso===todayISO)                return 'Today';
-  if(iso===shiftISO(todayISO,1))    return 'Tomorrow';
+  if(iso===todayISO)             return 'Today';
+  if(iso===shiftISO(todayISO,1)) return 'Tomorrow';
   const d=isoToUTCDate(iso);
   return d ? fmtRow.format(d) : '';
 }
 
-function calRow(e, todayISO, done){
+/* Two things on the same day print the date once. */
+function calRow(e, todayISO, done, repeat){
   const li=document.createElement('li');
   li.className=done?'past':'ahead';
-  const mark=document.createElement('span'); mark.className='mark'; mark.textContent=done?'✓':'';
-  const when=document.createElement('span'); when.className='when'; when.textContent=whenLabel(e.date,todayISO);
+  const mark=document.createElement('span'); mark.className='mark';
+  mark.textContent=(done&&!repeat)?'✓':'';
+  const when=document.createElement('span'); when.className='when';
+  when.textContent=repeat?'':whenLabel(e.date,todayISO);
   const what=document.createElement('span'); what.className='what'; what.textContent=e.what;
   li.appendChild(mark); li.appendChild(when); li.appendChild(what);
   return li;
 }
-
 function emptyRow(text){
   const li=document.createElement('li'); li.className='empty'; li.textContent=text; return li;
 }
@@ -221,19 +269,17 @@ function emptyRow(text){
 function render(data){
   const todayISO=isoLA(new Date());
 
-  /* TODAY — deliberately NOT auto-greyed once a time passes. We don't know
+  /* TODAY — deliberately NOT auto-greyed as the day goes on. We don't know
      that something actually happened, and guessing is how you get a wrong
      answer to "did that happen yet?". */
   const tl=document.getElementById('today-list'); tl.innerHTML='';
-  const items=(data.today||[]).filter(i=>i&&String(i.what||'').trim());
+  const items=(data.today||[]).map(t=>String(t||'').trim()).filter(Boolean);
   if(!items.length){ tl.appendChild(emptyRow('Nothing planned today.')); }
-  items.forEach(it=>{
+  items.forEach((t,i)=>{
     const li=document.createElement('li');
-    if(String(it.time||'').trim()){
-      const t=document.createElement('span'); t.className='t'; t.textContent=it.time; li.appendChild(t);
-    }
-    const w=document.createElement('span'); w.textContent=it.what; li.appendChild(w);
-    tl.appendChild(li);
+    const n=document.createElement('span'); n.className='n'; n.textContent=(i+1)+'.';
+    const w=document.createElement('span'); w.textContent=t;
+    li.appendChild(n); li.appendChild(w); tl.appendChild(li);
   });
 
   const nl=document.getElementById('notes'); nl.innerHTML='';
@@ -243,24 +289,25 @@ function render(data){
 
   const cal=document.getElementById('cal'); cal.innerHTML='';
   const win=calendarWindow(data.calendar,todayISO);
-  win.past.forEach(e=>cal.appendChild(calRow(e,todayISO,true)));
+  let prev=null;
+  win.past.forEach(e=>{ cal.appendChild(calRow(e,todayISO,true,e.date===prev)); prev=e.date; });
   const div=document.createElement('li'); div.className='divider';
   const lbl=document.createElement('span'); lbl.className='lbl'; lbl.textContent='TODAY';
   const rule=document.createElement('span'); rule.className='rule';
   div.appendChild(lbl); div.appendChild(rule); cal.appendChild(div);
   if(!win.ahead.length){ cal.appendChild(emptyRow('Nothing on the calendar yet.')); }
-  win.ahead.forEach(e=>cal.appendChild(calRow(e,todayISO,false)));
+  prev=null;
+  win.ahead.forEach(e=>{ cal.appendChild(calRow(e,todayISO,false,e.date===prev)); prev=e.date; });
 
   document.getElementById('reassure').textContent =
     data.reassure || 'Everything is okay. You are safe and loved.';
+
+  fitBlock('card-today','today-list',44,26);
+  fitBlock('card-notes','notes',      27,18);
+  fitBlock('card-cal',  'cal',        29,19);
 }
 
-/* 4. CLOCK + date line. Keeps the header on ONE line for every possible
-   date ("Today is Wednesday, September 24." is the widest case). */
-function fitLine(el,max,min){
-  el.style.fontSize=max+'px';
-  for(let s=max; s>min && el.scrollWidth>el.clientWidth; ){ s-=1; el.style.fontSize=s+'px'; }
-}
+/* 5. CLOCK + date line */
 let shownDate=null;
 function tick(){
   const now=new Date();
@@ -270,20 +317,20 @@ function tick(){
     shownDate=line;
     const el=document.getElementById('today-is');
     el.textContent=line;
-    fitLine(el,54,38);
+    fitLine(el,72,46);
     render(DATA);                           // re-evaluate past/upcoming
   }
 }
 
-/* 5. FIT — scale the 1280x720 stage to the real screen */
+/* 6. FIT — scale the 1280x720 stage to the real screen */
 function fit(){
   const stage=document.querySelector('.stage');
   stage.style.transform='scale('+Math.min(window.innerWidth/1280,window.innerHeight/720)+')';
 }
 
-/* 6. BOOT */
-window.addEventListener('resize',function(){ fit(); fitLine(document.getElementById('today-is'),54,38); });
-fit(); render(DATA); tick();
+/* 7. BOOT */
+window.addEventListener('resize',fit);
+fit(); tick();
 setInterval(tick,1000);   // live clock + automatic date rollover at midnight
 
 /* --- Seams for the wiring step (not needed for the static test) ---
