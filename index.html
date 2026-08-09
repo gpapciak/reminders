@@ -6,15 +6,12 @@
 <title>Mom's Board</title>
 <style>
   /* ============================================================
-     Mom's Cognitive Support Display — V3 (static mock data)
-     Designed at exactly 1280 x 720. The .stage is scaled to fit
-     whatever viewport Silk gives us, so the layout is PIXEL-
-     IDENTICAL on the 24" table TV and (later) the other two TVs.
-     No scrolling, no interaction required.
-
-     On a non-16:9 window (i.e. any laptop) you WILL see black bars
-     at the sides. That is the letterbox, not the layout. On the
-     720p TV the ratio matches exactly and it fills the screen.
+     Mom's Cognitive Support Display — live Google Sheet data
+     Designed at 1280 x 720 and scaled to FILL whatever viewport it
+     gets. Silk on the Fire TV keeps a nav bar, so the real viewport
+     is short; the stage takes the height actually on offer and the
+     vertical squeeze (--vs) plus per-box auto-fit absorb it, rather
+     than letterboxing. No scrolling, no interaction required.
 
      TYPE SIZES ARE CEILINGS. Each box declares a --fs and JS steps
      it down only if the content would otherwise be clipped, so no
@@ -48,33 +45,40 @@
        stage must always lay out at exactly 1280x720 and be scaled, never
        resized. */
     flex:0 0 auto;
+    /* --vs is the vertical squeeze, set by fit(): stage height / 720. Silk
+       gives us a SHORT viewport, and fixed header/footer/padding would eat
+       the cards. Everything vertical scales with it so the squeeze is shared
+       rather than dumped entirely on the content. */
+    --vs:1;
     width:1280px; height:720px; transform-origin:center center;
     background:var(--paper); color:var(--ink);
-    display:flex; flex-direction:column; padding:20px 32px 16px; gap:14px;
+    display:flex; flex-direction:column;
+    padding:calc(20px*var(--vs)) 32px calc(16px*var(--vs));
+    gap:calc(14px*var(--vs));
     overflow:hidden;
   }
 
   /* ---- Header: the single most-asked question, full width ----
      line-height 1.25 (not 1.05) so the overflow:hidden needed by the
      auto-shrink can't clip the descenders in "Today"/"August". */
-  .head{ flex:0 0 auto; height:96px; display:flex; align-items:baseline;
+  .head{ flex:0 0 auto; height:calc(96px*var(--vs)); display:flex; align-items:baseline;
          justify-content:space-between; gap:26px; }
   .today-is{
     font-size:72px; font-weight:800; letter-spacing:-1px; line-height:1.25;
     white-space:nowrap; overflow:hidden; flex:1 1 auto; min-width:0;
   }
   .clock{
-    flex:0 0 auto; font-size:46px; font-weight:800; line-height:1.25;
+    flex:0 0 auto; font-size:calc(46px*var(--vs)); font-weight:800; line-height:1.25;
     font-variant-numeric:tabular-nums; color:var(--soft); white-space:nowrap;
   }
 
   /* ---- Body: left = today + notes, right = full-height timeline ---- */
-  .grid{ flex:1 1 auto; display:grid; grid-template-columns:46fr 54fr; gap:16px;
+  .grid{ flex:1 1 auto; display:grid; grid-template-columns:46fr 54fr; gap:calc(16px*var(--vs));
          min-height:0; overflow:hidden; }
-  .col{ display:flex; flex-direction:column; gap:16px; min-height:0; overflow:hidden; }
+  .col{ display:flex; flex-direction:column; gap:calc(16px*var(--vs)); min-height:0; overflow:hidden; }
   .card{
     background:var(--card); border:1px solid var(--line); border-radius:18px;
-    padding:14px 24px 16px; display:flex; flex-direction:column;
+    padding:calc(14px*var(--vs)) 24px calc(16px*var(--vs)); display:flex; flex-direction:column;
     min-height:0; overflow:hidden;
   }
   /* 5/4 measured as the best split once the standing prompt is in: TODAY
@@ -83,8 +87,8 @@
   #card-today{ flex:5 1 0; }
   #card-notes{ flex:4 1 0; }
   #card-cal  { flex:1 1 0; }
-  .cap{ flex:0 0 auto; font-size:21px; font-weight:800; letter-spacing:2.5px;
-        color:var(--muted); margin-bottom:10px; }
+  .cap{ flex:0 0 auto; font-size:calc(21px*var(--vs)); font-weight:800; letter-spacing:2.5px;
+        color:var(--muted); margin-bottom:calc(10px*var(--vs)); }
   .body{ flex:1 1 auto; min-height:0; overflow:hidden; }
 
   /* ---- TODAY ---- */
@@ -100,10 +104,13 @@
   .notes li{ font-size:var(--fs); font-weight:600; line-height:1.30; }
 
   /* Standing prompt: always true, never from the Sheet's daily row. Held
-     apart from the notes above it so a constant is never mistaken for news. */
+     apart from the notes above it so a constant is never mistaken for news.
+     Sized RELATIVE to the card so it shrinks with everything else — when it
+     was fixed at 21px on a short stage (which is what Silk gives us) it ate
+     the card and forced the real notes down to their minimum. */
   .standing{
     flex:0 0 auto; margin-top:11px; padding-top:11px; border-top:1px solid var(--line);
-    font-size:21px; font-weight:600; line-height:1.35; color:var(--muted);
+    font-size:calc(var(--fs)*0.78); font-weight:600; line-height:1.35; color:var(--muted);
   }
 
   /* ---- CALENDAR: past (✓) → TODAY → upcoming ---- */
@@ -126,7 +133,7 @@
   .empty{ font-size:var(--fs); font-weight:600; color:var(--muted); }
 
   /* ---- Footer: the reassurance line ---- */
-  .reassure{ flex:0 0 auto; text-align:center; font-size:46px; font-weight:700;
+  .reassure{ flex:0 0 auto; text-align:center; font-size:calc(46px*var(--vs)); font-weight:700;
              color:var(--soft); line-height:1.25; }
 </style>
 </head>
@@ -147,8 +154,10 @@
           </div>
           <div class="card" id="card-notes">
             <div class="cap">NOTES</div>
-            <div class="body"><ul class="notes" id="notes"></ul></div>
-            <div class="standing" id="standing"></div>
+            <div class="body">
+              <ul class="notes" id="notes"></ul>
+              <div class="standing" id="standing"></div>
+            </div>
           </div>
         </div>
         <div class="col">
@@ -166,29 +175,42 @@
 
 <script>
 /* ================================================================
-   1. MOCK DATA — stand-in for the Google Sheet.
+   1. DATA SOURCE — a Google Sheet, served as JSON by an Apps Script
+   web app. Paste the /exec URL below; SETUP.md has the Sheet layout
+   and the script to paste in.
 
-   When this is wired up the Sheet gets TWO tabs:
-     "Days"   one row per date  -> today[] and notes[]
-     "Events" one row per event -> calendar[]  (Date | Description)
+   The Sheet has three tabs:
+     "Days"     one row per date   -> TODAY items, NOTES, reassurance
+     "Events"   one row per event  -> CALENDAR   (Date | Description)
+     "Settings" key/value          -> standing prompt, defaults
 
    Calendar entries carry ONLY a date and a description. Whether
    something has already happened is computed from today's LA date,
    so nobody has to go back and tick things off.
    ================================================================ */
-const DATA = {
-  today: [
-    'Researching care options',
-    'OnPoint Credit Union',
-    'Best Buy',
-    'Gratitude',
-  ],
-  notes: [
-    'Greg here for 13 more days. Then Kathy comes. Then Chris.',
-  ],
-  /* Constant, not part of the daily row. Same text every day. */
-  standing: 'Feeling hungry? Eat some food. Feeling thirsty? Drink some water. Stay hydrated.',
-  calendar: [
+const ENDPOINT = '';          /* <-- paste the Apps Script /exec URL */
+
+const REFRESH_MS    = 3*60*1000;    /* pull the Sheet every ~3 min      */
+const RELOAD_MS     = 60*60*1000;   /* full reload hourly (Silk watchdog)*/
+const FETCH_TIMEOUT = 20*1000;
+const STALE_NOTE_MS = 25*60*1000;   /* quietly show "updated" past this */
+const STORE_KEY     = 'momboard.v1';
+
+/* Safe constants. These are always true, so they survive a dead network
+   and the board is never bare. The Settings tab can override them. */
+const DEFAULT_STANDING =
+  'Feeling hungry? Eat some food. Feeling thirsty? Drink some water. Stay hydrated.';
+const DEFAULT_REASSURE = 'Everything is okay. You are safe and loved.';
+
+/* ?demo=1 renders sample content with no endpoint — layout work only.
+   Never reachable by accident: the TV opens the bare URL. */
+const DEMO = /(^|[?&])demo=1(&|$)/.test(location.search);
+const DEMO_DATA = {
+  today:[ 'Researching care options','OnPoint Credit Union','Best Buy','Gratitude' ],
+  notes:[ 'Greg is here for {days:2026-08-20}. Then Kathy comes. Then Chris.' ],
+  standing: DEFAULT_STANDING,
+  reassure: DEFAULT_REASSURE,
+  calendar:[
     { date:'2026-08-04', what:'Saw Dr. Amal' },
     { date:'2026-08-06', what:'Had PT with Cindy' },
     { date:'2026-08-10', what:'1:30 pm  Dentist – crown' },
@@ -200,8 +222,16 @@ const DATA = {
     { date:'2026-09-02', what:'2:00 pm  Dental cleaning' },
     { date:'2026-09-17', what:'3:10 pm  Eyehealth NW' },
   ],
-  reassure: 'Everything is okay. You are safe and loved.',
 };
+
+/* What the board shows when it has nothing trustworthy for today.
+   Deliberately NOT yesterday's plans: a stale day row must never be
+   presented as though it were current. Dated events are different —
+   they are self-validating, so they survive (see paint()). */
+function safeFallback(){
+  return { today:[], notes:[], calendar:[],
+           standing:DEFAULT_STANDING, reassure:DEFAULT_REASSURE };
+}
 
 /* 2. TIME — always America/Los_Angeles (Mom's timezone) */
 const TZ='America/Los_Angeles';
@@ -225,16 +255,53 @@ function shiftISO(iso,days){
   d.setUTCDate(d.getUTCDate()+days);
   return d.toISOString().slice(0,10);
 }
+function daysBetween(fromISO,toISO){
+  const a=isoToUTCDate(fromISO), b=isoToUTCDate(toISO);
+  if(!a||!b) return null;
+  return Math.round((b.getTime()-a.getTime())/86400000);
+}
+
+/* ---- {days:YYYY-MM-DD} ------------------------------------------------
+   Countdowns typed by hand go stale silently ("Greg here for 13 more days"
+   is wrong tomorrow and nobody notices). Instead the Sheet holds the DATE
+   and the board does the arithmetic every render:
+
+     "Greg is here for {days:2026-08-20}."  ->  "... for 12 more days."
+                                                "... for 1 more day."
+                                                "... for today."
+
+   Once the date has passed the whole line is DROPPED rather than shown
+   with a wrong or negative number. Same reasoning as the calendar: never
+   turn stale data into a confident statement. */
+const DAYS_TOKEN=/\{days:(\d{4}-\d{2}-\d{2})\}/g;
+function expandDays(text,todayISO){
+  let expired=false;
+  const out=String(text==null?'':text).replace(DAYS_TOKEN,function(_,iso){
+    const n=daysBetween(todayISO,iso);
+    if(n===null||n<0){ expired=true; return ''; }
+    if(n===0) return 'today';
+    if(n===1) return '1 more day';
+    return n+' more days';
+  });
+  return { text:out.replace(/\s{2,}/g,' ').trim(), expired:expired };
+}
+function expandList(list,todayISO){
+  return (list||[]).map(function(t){ return expandDays(t,todayISO); })
+                   .filter(function(r){ return !r.expired && r.text; })
+                   .map(function(r){ return r.text; });
+}
 
 /* 3. AUTO-FIT — every box declares a max type size and shrinks only
    as far as it must. Layout can never clip and never scrolls. */
-function fitBlock(cardId, listId, max, min){
+/* Measures the whole .body, so anything inside it (the list AND the standing
+   prompt) is accounted for. Measuring only the list is how the standing
+   prompt was able to overflow the card unnoticed. */
+function fitBlock(cardId, max, min){
   const card=document.getElementById(cardId);
   const body=card.querySelector('.body');
-  const list=document.getElementById(listId);
   let s=max;
   card.style.setProperty('--fs',s+'px');
-  while(s>min && list.scrollHeight>body.clientHeight){
+  while(s>min && body.scrollHeight>body.clientHeight){
     s-=1; card.style.setProperty('--fs',s+'px');
   }
   return s;
@@ -286,9 +353,7 @@ function emptyRow(text){
   const li=document.createElement('li'); li.className='empty'; li.textContent=text; return li;
 }
 
-function render(data){
-  const todayISO=isoLA(new Date());
-
+function render(data,todayISO){
   /* TODAY — deliberately NOT auto-greyed as the day goes on. We don't know
      that something actually happened, and guessing is how you get a wrong
      answer to "did that happen yet?". */
@@ -328,45 +393,185 @@ function render(data){
   document.getElementById('reassure').textContent =
     data.reassure || 'Everything is okay. You are safe and loved.';
 
-  fitBlock('card-today','today-list',44,26);
-  fitBlock('card-notes','notes',      27,18);
-  fitBlock('card-cal',  'cal',        29,19);
+  fitBlock('card-today',44,22);
+  fitBlock('card-notes',27,15);
+  fitBlock('card-cal',  29,16);
 }
 
-/* 5. CLOCK + date line */
+/* 5. STATE
+   dayRow   — today's row. Date-specific, so it EXPIRES at midnight.
+   events   — the calendar. Every entry carries its own date, so it stays
+              valid across midnight and is kept even when the day row is
+              stale or missing. This split is the whole safety model:
+              undated things expire, dated things don't. */
+let dayRow=null;      /* { forDate, at, today[], notes[], reassure }        */
+let events=null;      /* { at, list[] }                                     */
+let settings={};      /* { standing, reassure, notes }                      */
+let clockSkewMs=0;    /* server time - device time; Fire TV clocks drift    */
+let inFlight=false, lastOkAt=0, lastError=null;
+
+function deviceNow(){ return new Date(Date.now()+clockSkewMs); }
+
+function save(){
+  try{ localStorage.setItem(STORE_KEY,JSON.stringify({d:dayRow,e:events,s:settings})); }
+  catch(err){}
+}
+function restore(){
+  try{
+    const raw=localStorage.getItem(STORE_KEY); if(!raw) return;
+    const o=JSON.parse(raw)||{};
+    if(o.d&&o.d.forDate) dayRow=o.d;
+    if(o.e&&Object.prototype.toString.call(o.e.list)==='[object Array]') events=o.e;
+    if(o.s&&typeof o.s==='object') settings=o.s;
+  }catch(err){}
+}
+
+/* 6. FETCH */
+function loadData(){
+  if(inFlight||DEMO||!ENDPOINT) return Promise.resolve();
+  inFlight=true;
+  /* Cache-bust every request. Silk caches aggressively and Apps Script
+     responses are otherwise indistinguishable request to request. */
+  const url=ENDPOINT+(ENDPOINT.indexOf('?')<0?'?':'&')+'t='+Date.now();
+  let ctrl=null,timer=null;
+  try{ ctrl=new AbortController(); }catch(err){ ctrl=null; }
+  if(ctrl) timer=setTimeout(function(){ try{ctrl.abort();}catch(err){} },FETCH_TIMEOUT);
+  const opts={cache:'no-store',redirect:'follow'};
+  if(ctrl) opts.signal=ctrl.signal;
+
+  return fetch(url,opts)
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(p){
+      if(!p||p.ok===false) throw new Error((p&&p.error)||'endpoint reported failure');
+      /* Trust the server's clock over the TV's for BOTH the displayed time
+         and the row lookup, so a drifting Fire TV cannot show the wrong day. */
+      if(typeof p.serverEpochMs==='number'&&isFinite(p.serverEpochMs)){
+        clockSkewMs=p.serverEpochMs-Date.now();
+      }
+      const todayISO=isoLA(deviceNow());
+      const row=(p.days||{})[todayISO]||null;
+      settings=p.settings||{};
+      events={ at:Date.now(), list:(p.events||[]).filter(function(e){
+                 return e&&isoToUTCDate(e.date)&&String(e.what||'').trim(); }) };
+      /* A successful fetch that finds no row for today is still GOOD news —
+         we now know there is nothing planned, rather than failing to ask. */
+      dayRow={ forDate:todayISO, at:Date.now(),
+               today:(row&&row.today)||[], notes:(row&&row.notes)||[],
+               reassure:(row&&row.reassure)||'' };
+      lastOkAt=Date.now(); lastError=null;
+      save();
+    })
+    .catch(function(err){ lastError=err; })     /* keep whatever we had */
+    .then(function(){
+      if(timer) clearTimeout(timer);
+      inFlight=false;
+      paint();
+    });
+}
+
+/* 7. PAINT — assemble what to show from whatever state we have */
+function paint(){
+  const todayISO=isoLA(deviceNow());
+  const model=safeFallback();
+
+  if(DEMO){
+    model.today=DEMO_DATA.today; model.notes=DEMO_DATA.notes;
+    model.calendar=DEMO_DATA.calendar; model.standing=DEMO_DATA.standing;
+    model.reassure=DEMO_DATA.reassure;
+  }else{
+    /* Dated events survive regardless of the day row's age. */
+    if(events&&events.list) model.calendar=events.list;
+    model.standing=settings.standing||DEFAULT_STANDING;
+    model.reassure=settings.reassure||DEFAULT_REASSURE;
+
+    /* The day row is only usable if it is actually for TODAY. At midnight
+       this goes false on its own and the board empties until the next
+       fetch — which tick() triggers immediately on the date change. */
+    if(dayRow&&dayRow.forDate===todayISO){
+      model.today=dayRow.today||[];
+      model.notes=(dayRow.notes||[]).concat(settings.notes?[settings.notes]:[]);
+      if(dayRow.reassure) model.reassure=dayRow.reassure;
+    }else if(settings.notes){
+      model.notes=[settings.notes];
+    }
+  }
+
+  model.today=expandList(model.today,todayISO);
+  model.notes=expandList(model.notes,todayISO);
+  const st=expandDays(model.standing,todayISO);
+  model.standing=st.expired?'':st.text;
+
+  /* Say so quietly when the data has stopped arriving. One line, no alarm,
+     and only once it is old enough to matter. */
+  if(lastOkAt&&(Date.now()-lastOkAt)>STALE_NOTE_MS){
+    model.reassure=model.reassure+'   ·   Updated '+
+      fmtTime.format(new Date(lastOkAt+clockSkewMs));
+  }
+  render(model,todayISO);
+}
+
+/* 8. CLOCK + date line */
 let shownDate=null;
 function tick(){
-  const now=new Date();
+  const now=deviceNow();
   document.getElementById('clock').textContent=fmtTime.format(now);
   const line='Today is '+fmtToday.format(now)+'.';
-  if(line!==shownDate){                     // also catches midnight rollover
+  if(line!==shownDate){                     /* also catches midnight rollover */
+    const firstPaint=(shownDate===null);
     shownDate=line;
     const el=document.getElementById('today-is');
     el.textContent=line;
-    fitLine(el,72,46);
-    render(DATA);                           // re-evaluate past/upcoming
+    fitHeader();
+    paint();                                /* re-evaluate past/upcoming */
+    if(!firstPaint) loadData();             /* new day: get its row now   */
   }
 }
 
-/* 6. FIT — scale the 1280x720 stage to the real screen */
+/* 9. FIT — fill the screen.
+   Silk on the Fire TV keeps a top navigation bar, so the viewport is
+   SHORTER than 720 CSS px. Scaling by min(w/1280, h/720) made height the
+   binding constraint, which shrank everything and left black bars down
+   both sides. Instead: always scale to the full WIDTH, and let the stage
+   take whatever height the viewport actually offers. The auto-fit then
+   absorbs the missing pixels as slightly smaller type rather than as
+   letterboxing. Clamped so an extreme window can't produce a silly shape. */
+const MIN_H=470, MAX_H=900;
+let vScale=1;
 function fit(){
   const stage=document.querySelector('.stage');
-  stage.style.transform='scale('+Math.min(window.innerWidth/1280,window.innerHeight/720)+')';
+  let scale=window.innerWidth/1280;
+  let h=window.innerHeight/scale;
+  if(h<MIN_H){ h=MIN_H; scale=Math.min(scale,window.innerHeight/MIN_H); }
+  else if(h>MAX_H){ h=MAX_H; }
+  h=Math.round(h);
+  vScale=Math.max(0.62,Math.min(1.15,h/720));
+  stage.style.height=h+'px';
+  stage.style.setProperty('--vs',vScale);
+  stage.style.transform='scale('+scale+')';
+}
+/* Header type scales with the squeeze too, then shrinks further if a long
+   date ("Today is Wednesday, September 24.") still would not fit on one line. */
+function fitHeader(){
+  fitLine(document.getElementById('today-is'),
+          Math.round(72*vScale), Math.round(38*vScale));
 }
 
-/* 7. BOOT */
-window.addEventListener('resize',fit);
-fit(); tick();
-setInterval(tick,1000);   // live clock + automatic date rollover at midnight
+/* 10. BOOT */
+restore();
+fit();
+tick();                       /* paints from restored/empty state at once */
+loadData();
 
-/* --- Seams for the wiring step (not needed for the static test) ---
-   Data refresh: setInterval(loadData, 3*60*1000)   // fetch sheet every 3 min
-   Full reload : setInterval(()=>location.replace('?v='+Date.now()), 60*60*1000)
-   loadData(): fetch endpoint (cache-bust with ?t=Date.now()), take the "Days"
-   row whose date === today's LA date plus the whole "Events" tab, render().
-   On fetch failure keep the last known GOOD state; if there is no row for
-   today, fall back to date + reassurance + "Nothing planned today."
------------------------------------------------------------------- */
+setInterval(tick,1000);       /* live clock + date rollover at midnight   */
+setInterval(loadData,REFRESH_MS);
+setInterval(paint,60*1000);   /* lets the staleness note appear on its own */
+setTimeout(function(){ location.replace('?v='+Date.now()); },RELOAD_MS);
+
+window.addEventListener('resize',function(){ fit(); fitHeader(); paint(); });
+window.addEventListener('online',loadData);
+document.addEventListener('visibilitychange',function(){
+  if(!document.hidden) loadData();
+});
 </script>
 </body>
 </html>
