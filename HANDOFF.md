@@ -16,6 +16,10 @@ happening, has that already happened, is everything okay."
 **Live:** https://gpapciak.github.io/reminders/
 **Repo:** https://github.com/gpapciak/reminders (public)
 
+This file covers the **application** — what it shows and why. Keeping the
+displays switched on, foregrounded and recoverable from abroad is a separate
+layer: see `OPERATIONS.md`.
+
 ## Hardware
 
 - Insignia 24" Fire TV, **720p**, viewed from ~32 inches at a table.
@@ -139,8 +143,14 @@ asking.
   row for today, 40-minute-stale data, countdown expiry.
 - Live cross-origin fetch, `currentonly` scope, `{days:}` arithmetic.
 
+**Verified on the actual Fire TV:**
+- The board renders correctly in Silk and fills the screen.
+- **Midnight rollover against the live Sheet** — the date line advanced, the
+  routine swapped to the new day's row, and calendar entries moved past the
+  divider and gained their checkmarks. This is the path that runs unattended
+  every night.
+
 **Not verified on hardware:**
-- **A real midnight rollover against the live Sheet.** Simulated only.
 - Silk's exact viewport dimensions — inferred from the letterboxing symptom,
   never measured on the device.
 - Whether 25px routine type is readable from her chair.
@@ -154,6 +164,14 @@ asking.
   "what's next" against the clock, without the board claiming anything is done.
 - **Medication**, if the support arrangement changes.
 - **Bedroom / living-room variants** — `?screen=bedroom` etc. Nothing built.
+  Now also wanted as a device identity for the heartbeat below, and because the
+  bedroom display must not stay lit overnight.
+- **Heartbeat / remote observability.** The board already calls an endpoint we
+  control every 3 minutes; having `doGet` record which device asked and when
+  would answer "is it actually running?" from a phone anywhere. Cheapest
+  operational win available. See `OPERATIONS.md`.
+- **Screen Wake Lock** — worth testing in Silk with a visible debug readout,
+  with low expectations. Page activity provably does not keep Fire TV awake.
 - The calendar shows at most 10 entries (4 past + 6 upcoming, backfilled).
 
 ## Conventions
