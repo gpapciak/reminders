@@ -73,8 +73,15 @@ Today is Sunday, August 9.                            1:49 PM
         Everything is okay. You are safe and loved.
 ```
 
-Left column ~51%, right ~49%. The standing prompt sits under the CALENDAR and
-shares that card's height, so the two trade off against each other directly.
+Left column ~56%, right ~44% — the calendar's entries are mostly short, so the
+width went to the routine and notes. The standing prompt sits under the CALENDAR
+and shares that card's height, so the two trade off against each other directly;
+it is pinned to the card's bottom edge so leftover height falls above it rather
+than pooling underneath.
+
+The calendar is **height**-bound, not width-bound. Narrowing the date column
+buys nothing — measured across four ratios, the resolved type size did not move.
+If it needs to be larger, the lever is fewer entries, not more width.
 
 ## Deliberate departures from BRIEF.md
 

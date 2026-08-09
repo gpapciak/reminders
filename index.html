@@ -73,7 +73,7 @@
   }
 
   /* ---- Body: left = today + notes, right = full-height timeline ---- */
-  .grid{ flex:1 1 auto; display:grid; grid-template-columns:50.6fr 48.6fr; gap:calc(16px*var(--vs));
+  .grid{ flex:1 1 auto; display:grid; grid-template-columns:55.7fr 43.7fr; gap:calc(16px*var(--vs));
          min-height:0; overflow:hidden; }
   .col{ display:flex; flex-direction:column; gap:calc(16px*var(--vs)); min-height:0; overflow:hidden; }
   .card{
@@ -89,7 +89,17 @@
   #card-cal  { flex:1 1 0; }
   .cap{ flex:0 0 auto; font-size:calc(21px*var(--vs)); font-weight:800; letter-spacing:2.5px;
         color:var(--muted); margin-bottom:calc(10px*var(--vs)); }
-  .body{ flex:1 1 auto; min-height:0; overflow:hidden; }
+  /* Flex column so the standing prompt can be pinned to the bottom. Auto-fit
+     stops as soon as content fits, so there is always up to one step's worth of
+     leftover height — on a short viewport (the Fire TV) that step is a bigger
+     share of the card and the slack was pooling BELOW the prompt, reading as
+     dead space. Pinned, the slack falls between the last entry and the hairline
+     instead, where it looks like deliberate separation. */
+  .body{ flex:1 1 auto; min-height:0; overflow:hidden;
+         display:flex; flex-direction:column; }
+  .body > *{ flex:0 0 auto; }          /* never compress; let auto-fit decide */
+  #card-cal .cal{ margin-bottom:calc(var(--fs)*0.45); }   /* minimum gap */
+  #card-cal .standing{ margin-top:auto; }                 /* absorbs the slack */
 
   /* ---- TODAY ---- */
   #card-today{ --fs:44px; }
@@ -378,14 +388,15 @@ function calRow(e, todayISO, done, repeat){
   li.appendChild(mark); li.appendChild(when); li.appendChild(what);
   return li;
 }
-/* A pipe forces a line break WITHIN one note, so family can control where a
-   sentence wraps without starting a second note. Alt+Enter in the Sheet cell
-   still makes a separate note; this is the softer break.
+/* A pipe — or a newline typed with Alt+Enter — forces a line break WITHIN one
+   item, so family can control where a sentence wraps. In the Days tab a newline
+   already splits into separate notes, so there it is the pipe that matters; in
+   the Settings tab the value is read whole, so both work.
    Built from text nodes, never innerHTML — the text comes from a Sheet that
    several people edit. */
 function setTextWithBreaks(el, text){
   el.innerHTML='';
-  String(text==null?'':text).split('|').forEach(function(part,i){
+  String(text==null?'':text).split(/\r?\n|\|/).forEach(function(part,i){
     if(i) el.appendChild(document.createElement('br'));
     el.appendChild(document.createTextNode(part.trim()));
   });

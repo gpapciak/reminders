@@ -73,7 +73,13 @@ something already happened — that is the whole point of the column.
 | reassure | Everything is okay. You are safe and loved. |
 | notes | Greg is here for {days:2026-08-20}. Then Kathy comes. Then Chris. |
 
-- **standing** — the small grey line under the CALENDAR. Constant, shown every day. Accepts `|` line breaks too.
+- **standing** — the small grey line under the CALENDAR. Constant, shown every
+  day. Break it across lines with a pipe **or** Alt+Enter inside the cell:
+
+  `Feeling hungry? Eat some food.|Feeling thirsty? Drink some water. Stay hydrated.`
+
+  A semicolon does **not** work here. `Settings` values are read whole, unlike
+  the `Days` columns where a semicolon starts a new item.
 - **reassure** — the big line across the bottom.
 - **notes** — a note shown *every* day, below whatever is in today's `Days` row.
   Use it for things that stay true for weeks, so you type them once instead of
