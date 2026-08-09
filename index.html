@@ -98,6 +98,13 @@
                   display:flex; gap:calc(var(--fs)*0.30); align-items:baseline; }
   .today-list .n{ flex:0 0 auto; color:var(--note-ink); font-variant-numeric:tabular-nums; }
 
+  /* A long list (a daily routine rather than a few errands) goes into two
+     columns. Ten items stacked would have to drop to ~15px to fit, which is
+     unreadable across a room; two columns hold roughly twice that. Multi-column
+     fills top-to-bottom, so 1-5 sit above 6-10 rather than snaking sideways. */
+  .today-list.two{ display:block; column-count:2; column-gap:calc(var(--fs)*1.0); }
+  .today-list.two li{ break-inside:avoid; margin-bottom:calc(var(--fs)*0.30); }
+
   /* ---- NOTES ---- */
   #card-notes{ --fs:27px; }
   .notes{ list-style:none; display:flex; flex-direction:column; gap:calc(var(--fs)*0.45); }
@@ -188,7 +195,7 @@
    something has already happened is computed from today's LA date,
    so nobody has to go back and tick things off.
    ================================================================ */
-const ENDPOINT = '';          /* <-- paste the Apps Script /exec URL */
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxWpXuqZTXYxlk1gP8JtvML1tDoajdAK5nckcoO_uLMZlwZr6e8yt7SAt0CzWFEQE2A/exec';
 
 const REFRESH_MS    = 3*60*1000;    /* pull the Sheet every ~3 min      */
 const RELOAD_MS     = 60*60*1000;   /* full reload hourly (Silk watchdog)*/
@@ -359,6 +366,17 @@ function render(data,todayISO){
      answer to "did that happen yet?". */
   const tl=document.getElementById('today-list'); tl.innerHTML='';
   const items=(data.today||[]).map(t=>String(t||'').trim()).filter(Boolean);
+  /* A short errand list stays one column and stays large. A long routine list
+     splits in two and hands the left column more of the height, since NOTES
+     needs far less of it. Both thresholds are content-driven, so the layout is
+     stable for as long as the shape of the day's list is. */
+  const many=items.length>6;
+  tl.classList.toggle('two',many);
+  /* Measured with the real ten-item list. 6/4 gives 25px TODAY and 23px NOTES;
+     7/3 buys TODAY 30px but drops NOTES to 18px and the standing prompt to 14,
+     which is too small to read across a room. */
+  document.getElementById('card-today').style.flex=many?'6 1 0':'5 1 0';
+  document.getElementById('card-notes').style.flex=many?'4 1 0':'4 1 0';
   if(!items.length){ tl.appendChild(emptyRow('Nothing planned today.')); }
   items.forEach((t,i)=>{
     const li=document.createElement('li');
@@ -393,7 +411,7 @@ function render(data,todayISO){
   document.getElementById('reassure').textContent =
     data.reassure || 'Everything is okay. You are safe and loved.';
 
-  fitBlock('card-today',44,22);
+  fitBlock('card-today',44,15);
   fitBlock('card-notes',27,15);
   fitBlock('card-cal',  29,16);
 }
