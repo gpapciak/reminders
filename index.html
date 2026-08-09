@@ -73,7 +73,7 @@
   }
 
   /* ---- Body: left = today + notes, right = full-height timeline ---- */
-  .grid{ flex:1 1 auto; display:grid; grid-template-columns:46fr 54fr; gap:calc(16px*var(--vs));
+  .grid{ flex:1 1 auto; display:grid; grid-template-columns:50.6fr 48.6fr; gap:calc(16px*var(--vs));
          min-height:0; overflow:hidden; }
   .col{ display:flex; flex-direction:column; gap:calc(16px*var(--vs)); min-height:0; overflow:hidden; }
   .card{
@@ -110,18 +110,24 @@
   .notes{ list-style:none; display:flex; flex-direction:column; gap:calc(var(--fs)*0.45); }
   .notes li{ font-size:var(--fs); font-weight:600; line-height:1.30; }
 
-  /* Standing prompt: always true, never from the Sheet's daily row. Held
-     apart from the notes above it so a constant is never mistaken for news.
-     Sized RELATIVE to the card so it shrinks with everything else — when it
-     was fixed at 21px on a short stage (which is what Silk gives us) it ate
-     the card and forced the real notes down to their minimum. */
+  /* Standing prompt: always true, never from the Sheet's daily row. Sits at
+     the foot of the CALENDAR, held apart by a hairline so a constant is never
+     mistaken for a dated entry. Sized RELATIVE to its card so it shrinks with
+     everything else — fixed px outside the measured area is how it silently
+     overflowed and crushed its neighbour once already.
+
+     1.10 measured as free: it holds the prompt at 23px while the calendar sits
+     at 21px, which is exactly where a 1.00 ratio leaves it. Higher ratios cost
+     the calendar a point for almost nothing. */
   .standing{
-    flex:0 0 auto; margin-top:11px; padding-top:11px; border-top:1px solid var(--line);
-    font-size:calc(var(--fs)*0.78); font-weight:600; line-height:1.35; color:var(--muted);
+    flex:0 0 auto;
+    margin-top:calc(var(--fs)*0.45); padding-top:calc(var(--fs)*0.45);
+    border-top:1px solid var(--line);
+    font-size:calc(var(--fs)*1.10); font-weight:600; line-height:1.35; color:var(--muted);
   }
 
   /* ---- CALENDAR: past (✓) → TODAY → upcoming ---- */
-  #card-cal{ --fs:29px; }
+  #card-cal{ --fs:26px; }
   .cal{ list-style:none; display:flex; flex-direction:column; gap:calc(var(--fs)*0.40); }
   .cal li{ display:flex; gap:calc(var(--fs)*0.42); align-items:baseline; line-height:1.16; }
   .cal .mark{ flex:0 0 calc(var(--fs)*0.95); font-size:calc(var(--fs)*0.88);
@@ -164,17 +170,17 @@
             <div class="body"><ul class="today-list" id="today-list"></ul></div>
           </div>
           <div class="card" id="card-notes">
-            <div class="cap">NOTES</div>
-            <div class="body">
-              <ul class="notes" id="notes"></ul>
-              <div class="standing" id="standing"></div>
-            </div>
+            <div class="cap">NOTES AND MESSAGES</div>
+            <div class="body"><ul class="notes" id="notes"></ul></div>
           </div>
         </div>
         <div class="col">
           <div class="card" id="card-cal">
             <div class="cap">CALENDAR</div>
-            <div class="body"><ul class="cal" id="cal"></ul></div>
+            <div class="body">
+              <ul class="cal" id="cal"></ul>
+              <div class="standing" id="standing"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -326,6 +332,12 @@ function fitLine(el,max,min){
 
 /* Pick a window around today so the column never overflows: recent past
    above the divider, upcoming below, backfilling whichever side is short. */
+/* Ten entries is the priority; the calendar gives up type size to hold them.
+   The standing prompt shares this card, so the two trade off point for point —
+   its ratio below is set to keep it near its target while the calendar shrinks.
+   Dropped entries are always the furthest-future ones, which reappear as they
+   approach. Past entries are never trimmed first — they are what answers
+   "have we contacted X yet?". */
 const PAST_MAX=4, AHEAD_MAX=6, TOTAL_MAX=10;
 function calendarWindow(items, todayISO){
   const clean=(items||[])
@@ -338,6 +350,12 @@ function calendarWindow(items, todayISO){
   /* if one side is thin, let the other use the leftover rows */
   nAhead=Math.min(ahead.length,nAhead+(PAST_MAX-nPast));
   nPast =Math.min(past.length, nPast +(TOTAL_MAX-nPast-nAhead));
+  /* Never let a cap hide things silently. */
+  const hidden=(past.length-nPast)+(ahead.length-nAhead);
+  if(hidden>0&&window.console&&console.info){
+    console.info('board: '+hidden+' calendar entr'+(hidden===1?'y':'ies')+
+                 ' not shown ('+past.length+' past, '+ahead.length+' upcoming available)');
+  }
   return { past:past.slice(past.length-nPast), ahead:ahead.slice(0,nAhead) };
 }
 
@@ -360,6 +378,19 @@ function calRow(e, todayISO, done, repeat){
   li.appendChild(mark); li.appendChild(when); li.appendChild(what);
   return li;
 }
+/* A pipe forces a line break WITHIN one note, so family can control where a
+   sentence wraps without starting a second note. Alt+Enter in the Sheet cell
+   still makes a separate note; this is the softer break.
+   Built from text nodes, never innerHTML — the text comes from a Sheet that
+   several people edit. */
+function setTextWithBreaks(el, text){
+  el.innerHTML='';
+  String(text==null?'':text).split('|').forEach(function(part,i){
+    if(i) el.appendChild(document.createElement('br'));
+    el.appendChild(document.createTextNode(part.trim()));
+  });
+}
+
 function emptyRow(text){
   const li=document.createElement('li'); li.className='empty'; li.textContent=text; return li;
 }
@@ -398,12 +429,12 @@ function render(data,todayISO){
   const nl=document.getElementById('notes'); nl.innerHTML='';
   const notes=(data.notes||[]).map(n=>String(n||'').trim()).filter(Boolean);
   if(!notes.length){ nl.appendChild(emptyRow('No notes today.')); }
-  notes.forEach(n=>{ const li=document.createElement('li'); li.textContent=n; nl.appendChild(li); });
+  notes.forEach(n=>{ const li=document.createElement('li'); setTextWithBreaks(li,n); nl.appendChild(li); });
 
   /* Reserve no space at all when there is no standing prompt. */
   const st=document.getElementById('standing');
   const standing=String(data.standing||'').trim();
-  st.textContent=standing;
+  setTextWithBreaks(st,standing);
   st.style.display=standing?'block':'none';
 
   const cal=document.getElementById('cal'); cal.innerHTML='';
@@ -423,7 +454,7 @@ function render(data,todayISO){
 
   fitBlock('card-today',44,15);
   fitBlock('card-notes',27,15);
-  fitBlock('card-cal',  29,16);
+  fitBlock('card-cal',  26,14);
 }
 
 /* 5. STATE

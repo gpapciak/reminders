@@ -36,7 +36,12 @@ header text — but the spelling does.
 
   Past about six items the board switches to two columns automatically so the
   type stays large; the numbering keeps the order readable across the split.
-- **Notes** — same rule, one per line.
+- **Notes** — the NOTES AND MESSAGES box. One note per line (Alt+Enter), or
+  separate with semicolons.
+
+  A **pipe** `|` forces a line break *within* one note, for when you want to
+  control where a sentence wraps without starting a separate note:
+  `Kat called this morning.|She will ring again on Friday.`
 - **Reassurance** — leave blank almost always. Only fill it in to override the
   bottom line for one particular day.
 
@@ -68,7 +73,7 @@ something already happened — that is the whole point of the column.
 | reassure | Everything is okay. You are safe and loved. |
 | notes | Greg is here for {days:2026-08-20}. Then Kathy comes. Then Chris. |
 
-- **standing** — the small grey line under NOTES. Constant, shown every day.
+- **standing** — the small grey line under the CALENDAR. Constant, shown every day. Accepts `|` line breaks too.
 - **reassure** — the big line across the bottom.
 - **notes** — a note shown *every* day, below whatever is in today's `Days` row.
   Use it for things that stay true for weeks, so you type them once instead of

@@ -58,22 +58,23 @@ Headers are matched by name, so column order is free. Multi-line cells
 ## Layout
 
 ```
-Today is Saturday, August 8.                         8:04 PM
-┌───────────────────────────┬──────────────────────────────┐
-│ TODAY'S ROUTINE           │ CALENDAR                     │
-│ 1. Breakfast   5. Lunch   │  ✓ Tue, Aug 4  Saw Dr. Amal  │
-│ 2. Medications 6. Rest    │  ✓ Thu, Aug 6  Had PT        │
-│ 3. Weeding     7. Biking  │  TODAY ───────────────────   │
-│ 4. Rest        8. Dinner  │    Mon, Aug 10  1:30 Dentist │
-├───────────────────────────┤    Wed, Aug 19  Kathy arrives│
-│ NOTES                     │    Thu, Aug 27  Pest control │
-│ Greg is here for 12 more  │                              │
-│ days. Then Kathy comes.   │                              │
-│ ─────────────────────     │                              │
-│ Feeling hungry? Eat…      │                              │
-└───────────────────────────┴──────────────────────────────┘
+Today is Sunday, August 9.                            1:49 PM
+┌────────────────────────────┬─────────────────────────────┐
+│ TODAY'S ROUTINE            │ CALENDAR                    │
+│ 1. Breakfast   5. Lunch    │  ✓ Tue, Aug 4  Saw Dr. Amal │
+│ 2. Medications 6. Rest     │  ✓ Thu, Aug 6  Had PT       │
+│ 3. Reading     7. Biking   │  TODAY ──────────────────   │
+│ 4. Rest        8. Dinner   │    Tomorrow    1:30 Dentist │
+├────────────────────────────┤    Wed, Aug 19 Kathy arrives│
+│ NOTES AND MESSAGES         │    Thu, Sep 17 Eyehealth NW │
+│ Greg is here for 11 more   │  ─────────────────────────  │
+│ days. Then Kathy comes.    │  Feeling hungry? Eat some…  │
+└────────────────────────────┴─────────────────────────────┘
         Everything is okay. You are safe and loved.
 ```
+
+Left column ~51%, right ~49%. The standing prompt sits under the CALENDAR and
+shares that card's height, so the two trade off against each other directly.
 
 ## Deliberate departures from BRIEF.md
 
@@ -173,6 +174,9 @@ asking.
 - **Screen Wake Lock** — worth testing in Silk with a visible debug readout,
   with low expectations. Page activity provably does not keep Fire TV awake.
 - The calendar shows at most 10 entries (4 past + 6 upcoming, backfilled).
+  Ten is a deliberate floor to hold: the calendar gives up type size to keep
+  them, and anything trimmed is logged to the console rather than dropped
+  silently.
 
 ## Conventions
 
