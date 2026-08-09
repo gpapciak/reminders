@@ -156,7 +156,11 @@
       <div class="grid">
         <div class="col">
           <div class="card" id="card-today">
-            <div class="cap">TODAY</div>
+            <!-- "ROUTINE", not "TODAY": this describes the shape of her day so
+                 she can see what tends to come next. It is not a task list and
+                 must not read like one -- nothing here is her responsibility,
+                 and nothing is ever ticked off. -->
+            <div class="cap">TODAY'S ROUTINE</div>
             <div class="body"><ul class="today-list" id="today-list"></ul></div>
           </div>
           <div class="card" id="card-notes">
@@ -361,9 +365,15 @@ function emptyRow(text){
 }
 
 function render(data,todayISO){
-  /* TODAY — deliberately NOT auto-greyed as the day goes on. We don't know
-     that something actually happened, and guessing is how you get a wrong
-     answer to "did that happen yet?". */
+  /* TODAY'S ROUTINE — deliberately NOT auto-greyed as the day goes on. We
+     don't know that something actually happened, and guessing is how you get a
+     wrong answer to "did that happen yet?". It is also not hers to complete:
+     the list exists so she can see what usually comes next, which is steadying
+     when short-term memory is unreliable.
+
+     The numbers stay. They are not checklist markers -- they carry the reading
+     order across the two columns, so item 5 is unambiguously after item 4 even
+     though it sits at the top of the next column. */
   const tl=document.getElementById('today-list'); tl.innerHTML='';
   const items=(data.today||[]).map(t=>String(t||'').trim()).filter(Boolean);
   /* A short errand list stays one column and stays large. A long routine list

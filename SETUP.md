@@ -25,9 +25,17 @@ header text — but the spelling does.
 | 2026-08-08 | Researching care options⏎OnPoint Credit Union⏎Best Buy⏎Gratitude | Kat called this morning | |
 
 - **Date** — `2026-08-08`, or a real date cell, or `8/8/2026`.
-- **Today** — the numbered TODAY list. **One item per line** (press
-  **Alt+Enter** inside the cell), or separate with semicolons. Numbering is
-  automatic.
+- **Today** — TODAY'S ROUTINE: the shape of her day, in order. **One item per
+  line** (press **Alt+Enter** inside the cell), or separate with semicolons.
+  Numbering is automatic.
+
+  This is a *description*, not a task list. Nothing here is ever ticked off,
+  by her or by the board — it exists so she can see what usually comes next,
+  which is steadying when short-term memory is unreliable. Copy yesterday's
+  cell and adjust it for anything unusual about the day.
+
+  Past about six items the board switches to two columns automatically so the
+  type stays large; the numbering keeps the order readable across the split.
 - **Notes** — same rule, one per line.
 - **Reassurance** — leave blank almost always. Only fill it in to override the
   bottom line for one particular day.
