@@ -1,3 +1,10 @@
+> **This is the original spec, kept for the reasoning behind it. It is NOT a
+> description of what was built.** Several departures were deliberate — the
+> medication card, meals and IMPORTANT sections were removed, TODAY became a
+> non-obligating routine, and the calendar runs through today rather than
+> forward only. See `HANDOFF.md` for the current state and why each choice
+> was made. Where the two disagree, HANDOFF.md is correct.
+
 # Mom Cognitive Support Display — Build Brief
 
 ## Project goal
