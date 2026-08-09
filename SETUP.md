@@ -92,16 +92,44 @@ information this board exists to prevent.
 
 1. In the Sheet: **Extensions → Apps Script**.
 2. Delete whatever is there, paste all of `apps-script.gs`, **Save**.
-3. **Deploy → New deployment**, gear icon → **Web app**.
+3. Rename the project from "Untitled project" to **Mom's Board**, or you will
+   never find it again in your Google account permissions.
+4. **Pin the permissions** (see *Scopes* below): gear → Project Settings → tick
+   *Show "appsscript.json" manifest file in editor*, then open `appsscript.json`
+   and replace it with the copy of that file in this repo. **Save.**
+5. **Deploy → New deployment**, gear icon → **Web app**.
    - *Description*: anything
    - *Execute as*: **Me**
    - *Who has access*: **Anyone**
-4. **Deploy**, authorise when asked (choose your account → Advanced → Go to
-   project → Allow).
-5. Copy the **Web app URL** — it ends in `/exec`.
+6. **Deploy**, authorise when asked. Google shows *"Google hasn't verified this
+   app"* — expected: verification is for apps distributed to strangers, and the
+   developer here is you. **Advanced → Go to Mom's Board (unsafe) → Allow.**
+7. Copy the **Web app URL** — it ends in `/exec`.
 
 > "Anyone" means anyone holding that URL can read the Sheet's contents. Keep it
 > out of public places. The board itself is already on a public GitHub Pages URL.
+
+### Scopes
+
+Left to itself, Apps Script asks for **"See, edit, create, and delete all your
+Google Sheets spreadsheets"** plus **"Display and run third-party web content in
+prompts and sidebars"**. This script uses neither: it reads one Sheet and has no
+UI whatsoever. Automatic scope inference on container-bound projects over-asks.
+
+That matters more than usual here, because the web app is reachable by **anyone**
+with the URL and runs **as you** — so whatever you grant is what a stray request
+could reach. `appsscript.json` in this repo pins it to a single scope:
+
+```
+https://www.googleapis.com/auth/spreadsheets.currentonly
+```
+
+which covers the Sheet the script is attached to and nothing else in your Drive.
+The consent screen should then ask only for *"View and manage the spreadsheet
+that this application is installed in."*
+
+If a deployment with this scope fails to read the Sheet, drop the `oauthScopes`
+block, redeploy, and accept the broad grant — but try the narrow one first.
 
 Then in `index.html`, near the top of the `<script>`:
 
