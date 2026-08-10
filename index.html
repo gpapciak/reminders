@@ -155,6 +155,19 @@
 
   .empty{ font-size:var(--fs); font-weight:600; color:var(--muted); }
 
+  /* ---- ?debug=1 readout ----
+     Fixed to the VIEWPORT and deliberately outside .stage: it must never
+     enter the stage's flow, its transform, or fitBlock()'s measurements.
+     Sized and contrasted to be read across the room or through a Tapo
+     camera, not from a chair. Absent from the DOM entirely without the flag. */
+  #debug{
+    position:fixed; left:12px; bottom:12px; z-index:99;
+    background:rgba(18,16,12,.88); color:#f6f2e9;
+    font:600 17px/1.4 "Segoe UI",Roboto,Arial,sans-serif;
+    letter-spacing:.4px; padding:9px 13px; border-radius:10px;
+    white-space:pre; pointer-events:none;
+  }
+
   /* ---- Footer: the reassurance line ---- */
   .reassure{ flex:0 0 auto; text-align:center; font-size:calc(46px*var(--vs)); font-weight:700;
              color:var(--soft); line-height:1.25; }
@@ -229,9 +242,32 @@ const DEFAULT_STANDING =
   'Feeling hungry? Eat some food. Feeling thirsty? Drink some water. Stay hydrated.';
 const DEFAULT_REASSURE = 'Everything is okay. You are safe and loved.';
 
-/* ?demo=1 renders sample content with no endpoint — layout work only.
-   Never reachable by accident: the TV opens the bare URL. */
-const DEMO = /(^|[?&])demo=1(&|$)/.test(location.search);
+/* ---- URL flags and device identity ---------------------------------
+   ?demo=1   sample content, no endpoint — layout work only.
+   ?debug=1  on-screen diagnostics readout (wake lock, heartbeat, data age).
+   ?screen=  which display this is: table / living-room / bedroom.
+   None are reachable by accident: the TVs open a bookmarked URL. */
+function paramOf(name){
+  const m=new RegExp('(?:^|[?&])'+name+'=([^&]*)').exec(location.search);
+  return m?decodeURIComponent(m[1].replace(/\+/g,' ')):'';
+}
+const DEMO  = /(^|[?&])demo=1(&|$)/.test(location.search);
+const DEBUG = /(^|[?&])debug=1(&|$)/.test(location.search);
+
+/* The endpoint is public, so anything from a query string is untrusted before
+   it reaches the Sheet. Sanitised here AND again server-side. Never blank: an
+   unlabelled display must appear in the Status tab as "unnamed" rather than
+   quietly not being counted — a screen missing from the list is indistinguish-
+   able from a screen that never checked in. */
+const SCREEN=(function(){
+  const id=paramOf('screen').toLowerCase().trim()
+    .replace(/[\s_]+/g,'-')
+    .replace(/[^a-z0-9-]/g,'')
+    .replace(/-{2,}/g,'-')
+    .replace(/^-+|-+$/g,'')
+    .slice(0,24);
+  return id||'unnamed';
+})();
 const DEMO_DATA = {
   today:[ 'Researching care options','OnPoint Credit Union','Best Buy','Gratitude' ],
   notes:[ 'Greg is here for {days:2026-08-20}. Then Kathy comes. Then Chris.' ],
@@ -478,7 +514,7 @@ let dayRow=null;      /* { forDate, at, today[], notes[], reassure }        */
 let events=null;      /* { at, list[] }                                     */
 let settings={};      /* { standing, reassure, notes }                      */
 let clockSkewMs=0;    /* server time - device time; Fire TV clocks drift    */
-let inFlight=false, lastOkAt=0, lastError=null;
+let inFlight=false, lastOkAt=0, lastError=null, hbState='?';
 
 function deviceNow(){ return new Date(Date.now()+clockSkewMs); }
 
@@ -502,7 +538,8 @@ function loadData(){
   inFlight=true;
   /* Cache-bust every request. Silk caches aggressively and Apps Script
      responses are otherwise indistinguishable request to request. */
-  const url=ENDPOINT+(ENDPOINT.indexOf('?')<0?'?':'&')+'t='+Date.now();
+  const url=ENDPOINT+(ENDPOINT.indexOf('?')<0?'?':'&')+'t='+Date.now()+
+            '&screen='+encodeURIComponent(SCREEN);
   let ctrl=null,timer=null;
   try{ ctrl=new AbortController(); }catch(err){ ctrl=null; }
   if(ctrl) timer=setTimeout(function(){ try{ctrl.abort();}catch(err){} },FETCH_TIMEOUT);
@@ -528,6 +565,7 @@ function loadData(){
       dayRow={ forDate:todayISO, at:Date.now(),
                today:(row&&row.today)||[], notes:(row&&row.notes)||[],
                reassure:(row&&row.reassure)||'' };
+      hbState=String(p.heartbeat||'?');
       lastOkAt=Date.now(); lastError=null;
       save();
     })
@@ -597,7 +635,72 @@ function tick(){
   }
 }
 
-/* 9. FIT — fill the screen.
+/* 10. SCREEN WAKE LOCK — an EXPERIMENT, not a fix.
+   OPERATIONS.md is explicit that page activity does not keep a Fire TV awake:
+   this board already ticks a clock every second, fetches every three minutes
+   and reloads hourly, and the 4K Select idled anyway. The sleeping panel is a
+   device-layer problem and this is NOT the cure for it.
+
+   The only purpose here is to answer one open question with evidence: does
+   Silk implement navigator.wakeLock at all, and if it grants a lock does the
+   system take it straight back? The answer shows under ?debug=1 so it can be
+   read from across the room or through a camera.
+
+   UNSUPPORTED or an immediate release is a perfectly good result — a clean
+   negative closes the question. */
+let wakeState='INIT', wakeSince=0, wakeReleases=0, wakeDetail='', wakeLock=null;
+
+function wakeSupported(){
+  return !!(window.navigator && navigator.wakeLock && navigator.wakeLock.request);
+}
+function requestWakeLock(){
+  if(!wakeSupported()){ wakeState='UNSUPPORTED'; return; }
+  if(wakeLock) return;                       /* already holding one */
+  /* A lock can only be taken by a VISIBLE document; asking while hidden throws
+     and would report a misleading DENIED. */
+  if(document.hidden){ wakeState='HIDDEN'; return; }
+  try{
+    navigator.wakeLock.request('screen').then(function(sentinel){
+      wakeLock=sentinel; wakeState='ACTIVE'; wakeSince=Date.now(); wakeDetail='';
+      sentinel.addEventListener('release',function(){
+        wakeLock=null; wakeReleases++; wakeState='RELEASED';
+        /* Deliberately NOT re-requested here. The system reclaiming it
+           immediately is the interesting finding; papering over it with an
+           instant retry would hide the very thing we are measuring. The slow
+           retry below picks it up, and the release COUNT is the evidence. */
+      });
+    }).catch(function(err){
+      wakeLock=null; wakeState='DENIED'; wakeDetail=(err&&err.name)||String(err);
+    });
+  }catch(err){
+    wakeLock=null; wakeState='DENIED'; wakeDetail=(err&&err.name)||String(err);
+  }
+}
+
+/* 11. ?debug=1 READOUT — diagnostics for a screen nobody can walk up to. */
+let dbgEl=null;
+function shortAgo(ms){
+  if(!ms) return 'never';
+  const s=Math.max(0,Math.round((Date.now()-ms)/1000));
+  if(s<90) return s+'s';
+  const m=Math.round(s/60);
+  return m<90 ? m+'m' : Math.round(m/60)+'h';
+}
+function debugPaint(){
+  if(!DEBUG) return;
+  if(!dbgEl){
+    dbgEl=document.createElement('div'); dbgEl.id='debug';
+    document.body.appendChild(dbgEl);      /* body, NOT .stage — see the CSS */
+  }
+  const age=(wakeState==='ACTIVE'&&wakeSince)?' '+shortAgo(wakeSince):'';
+  const why=wakeDetail?' ('+wakeDetail+')':'';
+  dbgEl.textContent=
+    'WAKE '+wakeState+age+why+'   releases '+wakeReleases+'\n'+
+    SCREEN+'   data '+shortAgo(lastOkAt)+'   beat '+hbState+
+    '   '+window.innerWidth+'\u00d7'+window.innerHeight;
+}
+
+/* 12. FIT — fill the screen.
    Silk on the Fire TV keeps a top navigation bar, so the viewport is
    SHORTER than 720 CSS px. Scaling by min(w/1280, h/720) made height the
    binding constraint, which shrank everything and left black bars down
@@ -626,21 +729,40 @@ function fitHeader(){
           Math.round(72*vScale), Math.round(38*vScale));
 }
 
-/* 10. BOOT */
+/* 13. BOOT */
 restore();
 fit();
 tick();                       /* paints from restored/empty state at once */
 loadData();
+requestWakeLock();
+debugPaint();
 
 setInterval(tick,1000);       /* live clock + date rollover at midnight   */
 setInterval(loadData,REFRESH_MS);
 setInterval(paint,60*1000);   /* lets the staleness note appear on its own */
-setTimeout(function(){ location.replace('?v='+Date.now()); },RELOAD_MS);
+setInterval(debugPaint,1000); /* no-op without ?debug=1                   */
+/* Slow retry only. Fast enough to recover a lock the system took back,
+   slow enough that the release counter stays readable as evidence. */
+setInterval(function(){
+  if(wakeState!=='ACTIVE'&&wakeState!=='UNSUPPORTED') requestWakeLock();
+},60*1000);
+/* The hourly reload must CARRY THE FLAGS. location.replace('?v=…') replaces
+   the entire query string, so a display booted as ?screen=table would come
+   back an hour later as an anonymous one and its heartbeat would move to the
+   "unnamed" row — a fault that looks exactly like the TV having died. */
+function reloadUrl(){
+  const q=['v='+Date.now()];
+  if(SCREEN&&SCREEN!=='unnamed') q.push('screen='+encodeURIComponent(SCREEN));
+  if(DEBUG) q.push('debug=1');
+  if(DEMO)  q.push('demo=1');
+  return location.pathname+'?'+q.join('&');
+}
+setTimeout(function(){ location.replace(reloadUrl()); },RELOAD_MS);
 
-window.addEventListener('resize',function(){ fit(); fitHeader(); paint(); });
+window.addEventListener('resize',function(){ fit(); fitHeader(); paint(); debugPaint(); });
 window.addEventListener('online',loadData);
 document.addEventListener('visibilitychange',function(){
-  if(!document.hidden) loadData();
+  if(!document.hidden){ loadData(); requestWakeLock(); }
 });
 </script>
 </body>

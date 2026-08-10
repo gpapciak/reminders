@@ -44,13 +44,26 @@ Google Sheet  →  Apps Script web app (/exec, JSON)  →  index.html  →  Silk
   spreadsheets" plus a UI scope the code never uses. Confirmed working.
 - **`SETUP.md`** — how to build the Sheet and deploy. Written for family.
 
-### The Sheet (three tabs)
+### URL flags
+
+| Flag | Effect |
+|---|---|
+| `?screen=table` | names this display in the heartbeat; sanitised, defaults to `unnamed` |
+| `?debug=1` | corner readout: wake-lock state, data age, heartbeat, viewport |
+| `?demo=1` | sample content with no endpoint, for layout work |
+
+All three survive the hourly reload — `reloadUrl()` rebuilds the query rather
+than replacing it. Dropping `?screen=` would move a display's heartbeat to the
+`unnamed` row, which looks exactly like the TV having died.
+
+### The Sheet (four tabs)
 
 | Tab | Shape | Feeds |
 |-----|-------|-------|
 | `Days` | one row per date: `Date, Today, Notes, Reassurance` | TODAY'S ROUTINE, NOTES |
 | `Events` | one row per event: `Date, Description` | CALENDAR |
-| `Settings` | key/value: `standing`, `reassure`, `notes` | constants shown every day |
+| `Settings` | key/value: `standing`, `reassure`, `notes`, `alertAfterMinutes` | constants shown every day |
+| `Status` | written BY the board: `Device, Last seen, Ago, Status` | nothing — it is the heartbeat readout |
 
 Headers are matched by name, so column order is free. Multi-line cells
 (Alt+Enter) or semicolons both split into list items.
@@ -122,7 +135,11 @@ asking.
   for both the displayed time and which day's row to show, so a drifting Fire TV
   clock cannot display the wrong day.
 - **Nothing is ever inferred from time passing.** A passed time is not evidence
-  something happened. This is why routine items are never auto-greyed.
+  something happened. This is why routine items are never auto-greyed, and why
+  the `Status` tab's "Ago" is a live formula rather than text written once.
+- **Observability never blocks the thing observed.** The heartbeat write is
+  skipped — never queued — if another display holds the lock, and every failure
+  path in it degrades to a warning. The board gets its data regardless.
 
 ## The safety model
 
@@ -158,6 +175,16 @@ asking.
   divider and gained their checkmarks. This is the path that runs unattended
   every night.
 
+**Built but NOT yet confirmed against the live system:**
+- **The heartbeat.** Logic is unit-tested against a stubbed Sheet across every
+  failure path (missing tab, lock contention, freshness throttle, device cap,
+  hostile `?screen=`). It cannot record anything until the Apps Script is
+  redeployed as a new version AND a `Status` tab exists — until then the board
+  runs exactly as before and the response reports `heartbeat: no-tab`.
+- **Wake Lock on Silk.** Headless Chrome reports `ACTIVE`, which proves nothing
+  about Vega or Fire OS. This ships as an experiment with a visible answer, not
+  as a working feature.
+
 **Not verified on hardware:**
 - Silk's exact viewport dimensions — inferred from the letterboxing symptom,
   never measured on the device.
@@ -171,15 +198,11 @@ asking.
   day. Typing `8:00 am Breakfast` and styling the time would let her answer
   "what's next" against the clock, without the board claiming anything is done.
 - **Medication**, if the support arrangement changes.
-- **Bedroom / living-room variants** — `?screen=bedroom` etc. Nothing built.
-  Now also wanted as a device identity for the heartbeat below, and because the
-  bedroom display must not stay lit overnight.
-- **Heartbeat / remote observability.** The board already calls an endpoint we
-  control every 3 minutes; having `doGet` record which device asked and when
-  would answer "is it actually running?" from a phone anywhere. Cheapest
-  operational win available. See `OPERATIONS.md`.
-- **Screen Wake Lock** — worth testing in Silk with a visible debug readout,
-  with low expectations. Page activity provably does not keep Fire TV awake.
+- **Bedroom night variant** — `?screen=` now exists and carries the identity a
+  quieter bedroom layout would key off, but no variant behaviour is built. The
+  bedroom display still must not stay lit overnight.
+- **Screen Wake Lock is a live experiment, not a result.** Built and reporting
+  under `?debug=1`; whether Silk honours it is still unanswered. See below.
 - The calendar shows at most 10 entries (4 past + 6 upcoming, backfilled).
   Ten is a deliberate floor to hold: the calendar gives up type size to keep
   them, and anything trimmed is logged to the console rather than dropped

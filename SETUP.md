@@ -65,6 +65,27 @@ date and adds the green check itself. Two entries on the same date print the
 date once. Past entries stay visible for a few days so she can see that
 something already happened — that is the whole point of the column.
 
+### Tab: `Status` — written BY the board, read by you
+
+Add a tab named exactly **Status** and leave it empty. The script fills in the
+header row and one row per display the first time each checks in:
+
+| Device | Last seen | Ago | Status |
+|--------|-----------|-----|--------|
+| table | 2026-08-09 14:22 | 2 min ago | OK |
+| living-room | 2026-08-09 14:21 | 3 min ago | OK |
+| bedroom | 2026-08-09 09:04 | 5.3 hours ago | CHECK |
+
+**Do not type in this tab.** Everything is overwritten. It answers one question
+from anywhere in the world: is each screen actually running?
+
+*Ago* and *Status* are live formulas, not text — they recompute whenever you
+open the Sheet. That matters: a written-out "2 min ago" would freeze, so a
+display that died last night would still read "2 min ago" this morning.
+
+If the tab does not exist the board works exactly as before; the response
+simply carries a warning and nothing is recorded.
+
 ### Tab: `Settings` — key/value
 
 | Key | Value |
@@ -72,6 +93,7 @@ something already happened — that is the whole point of the column.
 | standing | Feeling hungry? Eat some food. Feeling thirsty? Drink some water. Stay hydrated. |
 | reassure | Everything is okay. You are safe and loved. |
 | notes | Greg is here for {days:2026-08-20}. Then Kathy comes. Then Chris. |
+| alertAfterMinutes | 15 |
 
 - **standing** — the small grey line under the CALENDAR. Constant, shown every
   day. Break it across lines with a pipe **or** Alt+Enter inside the cell:
@@ -84,6 +106,11 @@ something already happened — that is the whole point of the column.
 - **notes** — a note shown *every* day, below whatever is in today's `Days` row.
   Use it for things that stay true for weeks, so you type them once instead of
   copying them into every row.
+- **alertAfterMinutes** — how quiet a display must go before the `Status` tab
+  calls it `CHECK` instead of `OK`. Default 15. This is a judgement call and it
+  is yours: too low and a slow morning start looks like a fault, too high and a
+  dead screen goes unnoticed for hours. The board checks in every 3 minutes, so
+  anything above ~10 is safe from false alarms.
 
 ---
 
@@ -160,12 +187,53 @@ Commit and push, and the TV picks it up within the hour — or immediately if yo
 reopen the page.
 
 **After any later edit to the script you must Deploy → Manage deployments →
-edit → Version: New version.** Saving alone does not change what the URL
-serves. This catches everyone once.
+edit (pencil) → Version: New version → Deploy.** Saving alone does not change
+what the URL serves. This catches everyone once.
+
+> **The heartbeat needs this.** The `Status` tab stays empty until you redeploy
+> a new version — the URL keeps serving the older script until you do. Open the
+> `/exec` URL in a browser afterwards: `"heartbeat":"ok"` means it is recording.
 
 ---
 
-## 4. What the board does when things go wrong
+## 4. One URL per display
+
+Bookmark a different URL on each TV so each one identifies itself:
+
+| Display | URL |
+|---|---|
+| Table | `https://gpapciak.github.io/reminders/?screen=table` |
+| Living room | `https://gpapciak.github.io/reminders/?screen=living-room` |
+| Bedroom | `https://gpapciak.github.io/reminders/?screen=bedroom` |
+
+The name is tidied automatically — `Living Room`, `living_room` and
+`living-room` all become `living-room`. A display opened with no `?screen=`
+still checks in, under `unnamed`, so an unlabelled TV shows up as a row rather
+than silently going missing.
+
+Set each device's Silk homepage to its own URL. Then "launch Silk" *is* the
+recovery step after an idle wake, with no bookmark to select.
+
+### `?debug=1` — diagnostics
+
+Adding `&debug=1` draws a small readout in the bottom-left corner:
+
+```
+WAKE ACTIVE 6s   releases 0
+table   data 2m   beat ok   1280x650
+```
+
+`WAKE` is the Screen Wake Lock experiment, `data` is how long since the Sheet
+was last read, `beat` is whether the heartbeat recorded. Legible through a Tapo
+camera, which is the point.
+
+It draws over the reassurance line, so prefer running it on the living-room or
+bedroom TV rather than her table display. Without the flag nothing is added to
+the page at all.
+
+---
+
+## 5. What the board does when things go wrong
 
 Designed to be wrong in the safe direction rather than confidently wrong.
 
@@ -176,6 +244,7 @@ Designed to be wrong in the safe direction rather than confidently wrong.
 | No `Days` row for today | "Nothing planned today." The calendar still shows. |
 | Sheet unreachable from a cold start | Date, time, the standing prompt and the reassurance line — all of which are true regardless. |
 | A tab or column is missing | That section is empty; the rest works. The response includes a `warnings` list you can see by opening the `/exec` URL in a browser. |
+| No `Status` tab, or two displays writing at once | The heartbeat is skipped for that request and noted in the response. The board still gets its data — observability never blocks the thing being observed. |
 | The Fire TV's clock is wrong | The board uses the server's clock for both the displayed time and which day to show. |
 
 The rule behind all of it: **undated information expires, dated information does
@@ -184,7 +253,7 @@ still a fact about that date no matter how old the fetch is.
 
 ---
 
-## 5. Refresh behaviour
+## 6. Refresh behaviour
 
 - Sheet is re-read every **3 minutes**, with a cache-busting parameter.
 - The page fully reloads **hourly**, as protection against Silk misbehaving over

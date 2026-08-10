@@ -18,6 +18,12 @@
 
 var TZ = 'America/Los_Angeles';
 
+/* Heartbeat. The endpoint is public, so the Status tab has to be bounded:
+   anyone could invent ?screen= values. */
+var MAX_DEVICES = 20;
+var DEFAULT_ALERT_MIN = 15;     /* overridable via Settings/alertAfterMinutes */
+var BEAT_MIN_GAP_MS = 45000;
+
 function doGet(e) {
   var now = new Date();
   var out = {
@@ -27,6 +33,8 @@ function doGet(e) {
     days: {},
     events: [],
     settings: {},
+    screen: '',
+    heartbeat: 'off',
     warnings: []
   };
   try {
@@ -35,6 +43,7 @@ function doGet(e) {
     readDays(ss, tz, out);
     readEvents(ss, tz, out);
     readSettings(ss, out);
+    recordHeartbeat(ss, e, out);   /* after settings: it reads alertAfterMinutes */
   } catch (err) {
     out.ok = false;
     out.error = String((err && err.message) || err);
@@ -185,6 +194,127 @@ function readSettings(ss, out) {
     var k = norm(rows[r][0]);
     if (k) out.settings[k] = cell(rows[r], 1);
   }
+}
+
+
+/* ---------- heartbeat ----------
+ *
+ * Remote observability, and the cheapest available: every display already
+ * calls this endpoint every ~3 minutes, so recording WHO asked and WHEN turns
+ * an existing request into "is each screen actually running?" — answerable
+ * from a phone in another country, as data rather than a camera image someone
+ * has to interpret.
+ *
+ * Non-negotiable: this must never break the board. Every failure path here
+ * degrades to a warning and the caller still gets its data.
+ */
+
+/** Untrusted input from a public URL. Sanitised client-side too; done again
+ *  here because the client is not the only thing that can call this. Note a
+ *  leading "=" cannot survive, so nothing typed into ?screen= can land in the
+ *  Sheet as a formula. */
+function cleanScreenId(v) {
+  var s = String(v == null ? '' : v).toLowerCase().trim()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return s ? s.slice(0, 24) : 'unnamed';
+}
+
+function recordHeartbeat(ss, e, out) {
+  try {
+    var id = cleanScreenId(e && e.parameter ? e.parameter.screen : '');
+    out.screen = id;
+
+    var sh = ss.getSheetByName('Status');
+    if (!sh) {
+      out.warnings.push('no tab named "Status" - heartbeat not recorded');
+      out.heartbeat = 'no-tab';
+      return;
+    }
+
+    var lock = LockService.getScriptLock();
+    /* Short, and SKIPPED rather than queued. The board's data is the critical
+       path and the next beat is only three minutes away — never make one
+       display wait on another display's write. */
+    if (!lock.tryLock(1500)) { out.heartbeat = 'busy'; return; }
+    try { writeHeartbeat(sh, id, out); }
+    finally { lock.releaseLock(); }
+
+  } catch (err) {
+    /* Observability must never take the board down. */
+    out.heartbeat = 'error';
+    out.warnings.push('heartbeat: ' + String((err && err.message) || err));
+  }
+}
+
+function writeHeartbeat(sh, id, out) {
+  var HEAD = ['Device', 'Last seen', 'Ago', 'Status'];
+  var now = new Date();
+
+  var last = sh.getLastRow();
+  if (last < 1) {
+    sh.getRange(1, 1, 1, HEAD.length).setValues([HEAD]);
+    sh.setFrozenRows(1);
+    last = 1;
+  }
+
+  var rows = last > 1 ? sh.getRange(2, 1, last - 1, 2).getValues() : [];
+  var row = -1, i;
+  for (i = 0; i < rows.length; i++) {
+    if (norm(rows[i][0]) === norm(id)) { row = i + 2; break; }
+  }
+
+  if (row > 0) {
+    /* The board also refetches on visibilitychange and on regaining network,
+       which can bunch requests together. One write per device per minute is
+       ample for a 3-minute beat and keeps doGet cheap. */
+    var seen = rows[row - 2][1];
+    /* Duck-typed rather than `instanceof Date`: that check is realm-sensitive
+       and quietly fails on a value produced elsewhere, which would silently
+       disable this throttle. A non-date (someone typed in the cell) has no
+       getTime, falls through, and we simply rewrite the row. */
+    if (seen && typeof seen.getTime === 'function' &&
+        (now.getTime() - seen.getTime()) < BEAT_MIN_GAP_MS) {
+      out.heartbeat = 'fresh';
+      return;
+    }
+  } else {
+    if (rows.length >= MAX_DEVICES) {
+      /* Fold the overflow into a single row rather than letting a public URL
+         grow the tab without end. */
+      for (i = 0; i < rows.length; i++) {
+        if (norm(rows[i][0]) === 'other') { row = i + 2; break; }
+      }
+      if (row < 0) row = rows.length + 2;
+      id = 'other';
+      out.warnings.push('Status: device cap (' + MAX_DEVICES + ') reached - recorded as "other"');
+    } else {
+      row = rows.length + 2;
+    }
+    sh.getRange(row, 2).setNumberFormat('yyyy-mm-dd hh:mm');
+  }
+
+  /* "Ago" and "Status" are FORMULAS, not text. A written-out "2 min ago" would
+     freeze at the moment of writing, so a display that died an hour ago would
+     still read "2 min ago" forever — precisely the confidently-wrong stale
+     information this project exists to avoid. NOW() recalculates when the
+     Sheet is opened, so these are true whenever anybody actually looks. */
+  var alertMin = Number(out.settings.alertafterminutes);
+  if (!isFinite(alertMin) || alertMin <= 0) alertMin = DEFAULT_ALERT_MIN;
+
+  var b = '$B' + row;
+  var ago =
+    '=IF(' + b + '="","",' +
+    'IF((NOW()-' + b + ')*1440<90,ROUND((NOW()-' + b + ')*1440)&" min ago",' +
+    'IF((NOW()-' + b + ')*24<48,ROUND((NOW()-' + b + ')*24,1)&" hours ago",' +
+    'ROUND(NOW()-' + b + ',1)&" days ago")))';
+  var stat =
+    '=IF(' + b + '="","",IF((NOW()-' + b + ')*1440>' + alertMin + ',"CHECK","OK"))';
+
+  sh.getRange(row, 1, 1, 4).setValues([[id, now, ago, stat]]);
+  out.heartbeat = 'ok';
 }
 
 function shift(isoDate, days) {

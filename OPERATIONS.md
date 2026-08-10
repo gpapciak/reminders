@@ -74,38 +74,56 @@ the 4K Select still idled. That is about as much activity as a page can
 generate, so **no further page-side "keep busy" trick will work.** Stop looking
 for one; the fix is at the device layer.
 
-### Worth trying, page-side
+### Built
 
-- **Screen Wake Lock** — `navigator.wakeLock.request('screen')`. Needs HTTPS
-  (we have it) and a visible document; reacquire on `visibilitychange`.
-  Unknown whether Silk implements it on either OS, and **even if granted it may
-  not override system power management.** Build it with a visible debug readout
-  (`Wake Lock: ACTIVE / UNSUPPORTED / DENIED`) so it can be judged from across
-  the room or through a camera, then decide. Cheap to test, low expectation.
-
-- **Heartbeat — the cheapest remote observability we have, and it needs no
-  camera.** The board already calls an endpoint we control every 3 minutes. If
-  `doGet` recorded which device asked and when, a `Status` tab would show:
+- **Heartbeat — remote observability, no camera required.** `doGet` now records
+  which display asked and when into a `Status` tab:
 
   ```
-  table        last seen 2 min ago
-  living room  last seen 2 min ago
-  bedroom      last seen 4 hours ago     <- something is wrong
+  Device       Last seen          Ago             Status
+  table        2026-08-09 14:22   2 min ago       OK
+  bedroom      2026-08-09 09:04   5.3 hours ago   CHECK
   ```
 
-  Openable from a phone anywhere in the world. It answers "is the board
-  actually running?" directly, rather than inferring it from a camera image.
-  Needs a per-device identity (below), `LockService` around the write, and no
-  slowdown to `doGet`. **Not built — recommended as the next operational step.**
+  Openable from a phone anywhere. *Ago* and *Status* are live formulas, not
+  text — written-out text would freeze and a display dead since last night
+  would still read "2 min ago". `CHECK` appears after `alertAfterMinutes` in
+  `Settings` (default 15), which is a judgement the family owns rather than a
+  number buried in code.
 
-- **`?screen=table` / `?screen=bedroom`** — already anticipated in `BRIEF.md`
-  as a later feature. Doubles as the heartbeat's device id, and is how the
-  bedroom gets a quieter night variant.
+  Guarded: `LockService` with a short **try**-lock that is skipped rather than
+  queued, a 45-second per-device write throttle (the board also refetches on
+  visibilitychange and on regaining network, which bunches requests), a 20-
+  device cap folding overflow into one `other` row, and hard sanitising of
+  `?screen=` — the endpoint is public, so anyone can invent values. Every
+  failure degrades to a warning; the board always gets its data.
 
-- **Silk's homepage should be the dashboard URL.** After an idle wake the 4K
-  Select returns to HOME, so any recovery path ends in "launch Silk". If Silk's
-  homepage is the board, launching Silk *is* recovering the board — no
-  bookmark navigation, nothing for her to select. Cheap, do it on every device.
+  **Needs a redeploy** (Deploy → Manage deployments → New version) and a
+  `Status` tab before it records anything.
+
+- **`?screen=table` / `?screen=living-room` / `?screen=bedroom`** — device
+  identity, sanitised, defaulting to `unnamed` so an unlabelled display appears
+  as a row rather than silently missing. Carried across the hourly reload.
+  This is also the identity a bedroom night-variant will key off.
+
+- **Screen Wake Lock — an experiment with a visible answer, NOT a fix.** Under
+  `?debug=1` a corner readout reports `ACTIVE / RELEASED / UNSUPPORTED / DENIED`
+  plus a release counter, legible through a Tapo camera. A lock released
+  immediately by the system is the interesting result, so it is deliberately
+  **not** re-requested on release — only on `visibilitychange` and a slow 60s
+  retry, leaving the release count as the evidence.
+
+  **Expect UNSUPPORTED or an immediate release on Vega.** A clean negative
+  closes open question 2 below, which is a successful outcome. Headless Chrome
+  reports ACTIVE and proves nothing.
+
+### Worth doing, not built
+
+- **Silk's homepage should be the dashboard URL** — each device pointed at its
+  own `?screen=` URL. After an idle wake the 4K Select returns to HOME, so any
+  recovery path ends in "launch Silk". If Silk's homepage is the board,
+  launching Silk *is* recovering the board — no bookmark navigation, nothing
+  for her to select. Cheap, do it on every device.
 
 ### Already in place
 
@@ -194,7 +212,9 @@ Device-layer, being investigated separately. Approach empirically — do not
 assume forum answers apply to these OS versions.
 
 1. What exactly triggers idle on each platform?
-2. Does Wake Lock prevent it in Silk?
+2. Does Wake Lock prevent it in Silk? **Instrumented — open any display with
+   `?debug=1` and read the corner. `UNSUPPORTED`, or `RELEASED` with a climbing
+   counter, answers this.**
 3. Can the sleep timeout be changed (and via what, per OS)?
 4. Can Alexa wake the device? Does CEC reliably wake the TV and pick the input?
 5. After waking, what is on screen — and can Alexa launch Silk, or a named app?
