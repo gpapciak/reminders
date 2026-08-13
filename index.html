@@ -384,23 +384,40 @@ function fitLine(el,max,min){
    Dropped entries are always the furthest-future ones, which reappear as they
    approach. Past entries are never trimmed first — they are what answers
    "have we contacted X yet?". */
-const PAST_MAX=4, AHEAD_MAX=6, TOTAL_MAX=10;
+/* Ten entries is the priority; the calendar gives up type size to hold them.
+   The standing prompt shares this card, so the two trade off point for point.
+   Dropped entries are always the furthest-future ones, which reappear as they
+   approach. Past entries are never trimmed first — they are what answers
+   "have we contacted X yet?".
+
+   Exception: a CROWDED HORIZON earns the room. Once 8 or more things are
+   coming up, the past is capped at 2 and the freed rows go to upcoming — at
+   that point "what is coming" matters more than a long tail of confirmations,
+   and the recent past is still represented. When the future is thin the past
+   expands to fill the column instead, so the card is never half empty. */
+const PAST_MAX=4, PAST_MAX_BUSY=2, BUSY_AHEAD=8, TOTAL_MAX=10;
 function calendarWindow(items, todayISO){
   const clean=(items||[])
     .filter(e=>e&&isoToUTCDate(e.date)&&String(e.what||'').trim())
     .slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
   const past =clean.filter(e=>e.date<todayISO);
   const ahead=clean.filter(e=>e.date>=todayISO);
-  let nPast =Math.min(past.length, PAST_MAX);
-  let nAhead=Math.min(ahead.length,AHEAD_MAX);
-  /* if one side is thin, let the other use the leftover rows */
-  nAhead=Math.min(ahead.length,nAhead+(PAST_MAX-nPast));
-  nPast =Math.min(past.length, nPast +(TOTAL_MAX-nPast-nAhead));
+
+  const busy=ahead.length>=BUSY_AHEAD;
+  const pastCap=busy?PAST_MAX_BUSY:PAST_MAX;
+
+  let nPast =Math.min(past.length,pastCap);
+  let nAhead=Math.min(ahead.length,TOTAL_MAX-nPast);
+  /* Only a quiet horizon lets the past spill into the spare rows. Under the
+     busy cap those rows belong to upcoming, which is the whole point. */
+  if(!busy) nPast=Math.min(past.length,TOTAL_MAX-nAhead);
+
   /* Never let a cap hide things silently. */
   const hidden=(past.length-nPast)+(ahead.length-nAhead);
   if(hidden>0&&window.console&&console.info){
     console.info('board: '+hidden+' calendar entr'+(hidden===1?'y':'ies')+
-                 ' not shown ('+past.length+' past, '+ahead.length+' upcoming available)');
+                 ' not shown ('+past.length+' past, '+ahead.length+' upcoming available'+
+                 (busy?', past capped at '+PAST_MAX_BUSY+' - busy horizon':'')+')');
   }
   return { past:past.slice(past.length-nPast), ahead:ahead.slice(0,nAhead) };
 }

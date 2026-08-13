@@ -65,6 +65,11 @@ date and adds the green check itself. Two entries on the same date print the
 date once. Past entries stay visible for a few days so she can see that
 something already happened — that is the whole point of the column.
 
+The column holds 10 entries. Normally that is up to 4 past and 6 upcoming, but
+once **8 or more things are coming up** the past is trimmed to 2 so the busy
+stretch ahead gets the room. Nothing is deleted — trimmed entries are simply
+off-screen, and past ones reappear whenever the horizon quietens down.
+
 ### Tab: `Status` — written BY the board, read by you
 
 Add a tab named exactly **Status** and leave it empty. The script fills in the

@@ -203,7 +203,10 @@ asking.
   bedroom display still must not stay lit overnight.
 - **Screen Wake Lock is a live experiment, not a result.** Built and reporting
   under `?debug=1`; whether Silk honours it is still unanswered. See below.
-- The calendar shows at most 10 entries (4 past + 6 upcoming, backfilled).
+- The calendar shows at most 10 entries. Normally up to 4 past + 6 upcoming,
+  with either side spilling into the other's spare rows. **Once 8 or more
+  things are upcoming the past is capped at 2** and the freed rows go to the
+  future — a crowded horizon matters more than a long tail of confirmations.
   Ten is a deliberate floor to hold: the calendar gives up type size to keep
   them, and anything trimmed is logged to the console rather than dropped
   silently.
