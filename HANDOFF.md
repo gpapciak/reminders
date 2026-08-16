@@ -25,8 +25,11 @@ layer: see `OPERATIONS.md`.
 - Insignia 24" Fire TV, **720p**, viewed from ~32 inches at a table.
 - Amazon Silk browser, which **keeps a top navigation bar** — the usable
   viewport is roughly 1280×650, not 1280×720. Confirmed on the device.
-- Two more Fire TV Sticks exist (bedroom, living room). Same page eventually,
-  simplified variants later. Not built.
+- Two more Fire TV Sticks exist (bedroom, living room). All three run the same
+  page and, as shipped, all three show the day board around the clock. The
+  bedroom is the one intended to differ — it is the screen a night variant is
+  built for, and the only screen whose flag is meant to be flipped on (see
+  *Display modes* below).
 
 ## Architecture
 
@@ -48,13 +51,29 @@ Google Sheet  →  Apps Script web app (/exec, JSON)  →  index.html  →  Silk
 
 | Flag | Effect |
 |---|---|
-| `?screen=table` | names this display in the heartbeat; sanitised, defaults to `unnamed` |
-| `?debug=1` | corner readout: wake-lock state, data age, heartbeat, viewport |
+| `?screen=table` | names this display in the heartbeat; sanitised, defaults to `unnamed`. Also selects the per-screen night config |
+| `?debug=1` | corner readout: wake-lock state, data age, heartbeat, current mode, viewport |
 | `?demo=1` | sample content with no endpoint, for layout work |
 
 All three survive the hourly reload — `reloadUrl()` rebuilds the query rather
 than replacing it. Dropping `?screen=` would move a display's heartbeat to the
 `unnamed` row, which looks exactly like the TV having died.
+
+**Test hooks — all require `?demo=1`** and are inert without it, so a bookmarked
+TV URL cannot trip one. Night and focus are driven by the clock and the Sheet,
+so without these neither is reachable without waiting for 9pm or editing live
+data a household depends on.
+
+| Hook | Effect |
+|---|---|
+| `&night=1` / `&night=0` | force night mode on / off, ignoring screen and window |
+| `&focus=TEXT` | force a takeover |
+| `&focusuntil=4:00 pm` | …until this LA time (blank or unparseable = end of day) |
+| `&nightmsg=TEXT` | override the night message |
+| `&now=2026-08-15T22:30` | pretend it is this LA wall-clock time; the clock ticks on from there |
+
+Set as a clock *skew*, not a frozen time, so a boundary crossing can be watched
+happening. They are carried across the hourly reload too.
 
 ### The Sheet (four tabs)
 
@@ -62,7 +81,7 @@ than replacing it. Dropping `?screen=` would move a display's heartbeat to the
 |-----|-------|-------|
 | `Days` | one row per date: `Date, Today, Notes, Reassurance` | TODAY'S ROUTINE, NOTES |
 | `Events` | one row per event: `Date, Description` | CALENDAR |
-| `Settings` | key/value: `standing`, `reassure`, `notes`, `alertAfterMinutes` | constants shown every day |
+| `Settings` | key/value: `standing`, `reassure`, `notes`, `alertAfterMinutes`, `focus`, `focusUntil`, `night`, `nightStart`, `nightEnd` | constants shown every day, plus the two extra display modes |
 | `Status` | written BY the board: `Device, Last seen, Ago, Status` | nothing — it is the heartbeat readout |
 
 Headers are matched by name, so column order is free. Multi-line cells
@@ -96,6 +115,166 @@ The calendar is **height**-bound, not width-bound. Narrowing the date column
 buys nothing — measured across four ratios, the resolved type size did not move.
 If it needs to be larger, the lever is fewer entries, not more width.
 
+## Display modes — two axes, three combinations
+
+The board has three display states. They are **not** three special cases; they
+are two independent axes, and the modes fall out of the combinations. Anything
+added later should extend an axis rather than add a fourth branch.
+
+| Axis | Values |
+|---|---|
+| **Palette** | `day` — the warm paper/ink board · `night` — near-black ground, warm low-luminance amber text |
+| **Layout** | `full` — header + grid + reassurance · `single-message` — header + one dominant centred message + reassurance |
+
+| Mode | Palette | Layout | Middle is… |
+|------|---------|--------|------------|
+| **Day board** | day | full | — (the original board, unchanged) |
+| **Night** | night | single-message | the night orientation text |
+| **Focus** | day *or* night | single-message | an ad-hoc takeover message |
+
+**Currently live: day board and focus.** Night is built and tested but switched
+off on every screen pending an in-room test — see *Night* below for the one
+boolean that turns it on.
+
+**Selection order, re-evaluated on every paint** (`selectMode()`), never latched:
+
+1. A focus message is active → single-message with the focus text. Palette is
+   night if this screen is night-enabled **and** we are inside night hours,
+   otherwise day. So one takeover shows warm at 2pm and dark at 3am.
+2. Else this screen is night-enabled **and** inside night hours → single-message
+   with the night text, night palette.
+3. Else → the full day board, day palette.
+
+Both extra modes are clock-driven and nothing else, so `tick()` recomputes the
+selection every second and repaints **only when the answer changes** — a
+takeover has to disappear *at* its until-time, not up to a minute later, and
+with no network. The current state is on `<html>` as `data-mode` /
+`data-palette`, which is also what `?debug=1` and the headless harness read.
+
+### The single-message component
+
+One component, used by both night and focus, so the fit/clip invariants are
+solved once and a single centred block is the easiest possible case for the
+existing auto-fit.
+
+- **Header** — reused exactly as-is, same `fitHeader()`/`fitLine()` path.
+  Orientation is the whole point of this layout: the date and the clock are the
+  two questions the board exists to answer and they are true in every mode.
+- **Middle** — one message, centred, wrapping (unlike the header, which is
+  nowrap). `fitMessage()` shrinks it to fit; it never clips and never scrolls.
+  `{days:}` works inside it.
+- **Bottom** — focus keeps the normal reassurance line. **Night deliberately
+  has none**: the night message *is* the reassurance, and a second glowing line
+  in a dark bedroom is the opposite of minimal.
+
+Two deliberate differences between the two callers of the same component:
+
+- **Night has a lower type ceiling** (72px vs 160px). Both want opposite things
+  from the auto-fit: a takeover should be as large as the screen allows,
+  because being unmissable is its job, while the night message wants to be
+  legible from the bed and no larger. At the full ceiling it filled the panel
+  edge to edge and flooded a dark room with amber — exactly what the night
+  palette exists to avoid.
+
+  **72 is provisional and expected to come down.** The *direction* was settled
+  by looking at the render; the *number* cannot be, because the real question
+  is how much light a dark bedroom gets at 3am and no headless measurement
+  answers that. It is a tuning target for the in-room night test below, on the
+  same night as the glow-tolerance question — not a settled value, and not
+  load-bearing for anything else.
+- **`fitMessage()` measures differently from `fitBlock()`.** It compares the
+  message's own `offsetHeight` against the box, not `scrollHeight`: the box
+  centres its child, and a centred flex item that overflows spills equally
+  above and below, so the half above the top edge is invisible to
+  `scrollHeight` and an overflowing message would measure as fitting. It also
+  steps coarse-then-fine (6px down, ≤5px back up) because this ceiling is ~6x a
+  card's and a 1px walk would be ~130 reflows on a Fire TV per message change.
+
+### Focus — the safety model
+
+A focus takeover is live, acute and **time-bounded**. It always carries an
+until-instant and retires itself. The failure this is built to prevent is the
+board sitting there at 9pm still insisting *"Greg is gone until 4:00"* —
+stale, wrong, and distressing to someone who cannot check.
+
+This is the project's existing rule applied to a message: **a focus message
+with an until-instant is dated information**, so it is safe to cache and it
+expires by pure comparison, exactly like a calendar entry sliding into the past.
+
+- **Resolved server-side.** `doGet` turns `focusUntil` into an absolute
+  `focusUntilEpochMs`, in `America/Los_Angeles`, DST included, and caps it at LA
+  end-of-day. The client does one absolute comparison against `deviceNow()` and
+  stays dumb.
+- **Why the server.** The LA date is already known and already authoritative
+  there, consistent with "the server's clock wins" — and an absolute instant
+  cannot be re-interpreted against a later day. A cached bare `"4:00 pm"` could
+  be, and that is precisely how yesterday's takeover would resurrect itself on
+  a display that lost its network.
+- **Same-day cap, always.** Anything that needs to outlive today is not a
+  takeover, it is a NOTES line, where it coexists with the calendar instead of
+  suppressing it for days. An until past end-of-day is capped and pushes a line
+  into `warnings`, visible by opening `/exec`.
+- **Blank until + a message present** → end of LA day. That is the "I have just
+  stepped out and I don't know how long" case, and it is bounded and
+  self-clearing, so it never needs a second edit to take the message down.
+- **Missing or blank message** → no takeover, ever. Message and instant are set
+  together or not at all (`setFocus()`), so "a message with no deadline" is not
+  a representable state.
+- **An unparseable `focusUntil`** falls back to end of day *with a warning*,
+  rather than dropping the takeover. Judgement call, and it goes the other way
+  from the malformed-message case on purpose: the message itself is well-formed
+  and acute, and suppressing something urgent because a time was typed oddly is
+  the worse failure. It is still bounded, so it can never become stuck.
+- **Client-side belt and braces.** `activeFocus()` also refuses any focus whose
+  `focusForDate` is not today, so a takeover cannot outlive its day even if a
+  nonsense instant somehow got through.
+
+In v1 focus is **global** — one message on every screen, rendered in whatever
+palette each screen currently warrants. Per-screen targeting is a documented
+future option (it would want its own tab), not now.
+
+### Night
+
+- **Night-enabled is per-screen**, a small `SCREEN_MODES` map in the JS keyed by
+  `?screen=`. A screen not in the map (including `unnamed`) stays on the day
+  board. The table and living-room displays run the day board 24/7 successfully
+  — confirmed behaviour, and changing it would be a regression.
+
+- **⚠ AS SHIPPED, NIGHT IS OFF ON EVERY SCREEN — BEDROOM INCLUDED.** The whole
+  night path is built, measured and live; `SCREEN_MODES.bedroom.night` is
+  `false` and is the only thing gating it. It ships off deliberately: whether a
+  dim glow in her room at 3am is tolerable can only be found out in that room,
+  and a feature that changes what a bedroom looks like overnight should not go
+  live ahead of somebody being present to see the first night of it.
+
+  **To enable:** flip that one boolean to `true` and push. The display picks it
+  up at its next hourly reload. Nothing else changes — verified by flipping the
+  flag at runtime in the harness and watching the 21:00 / 06:00 boundaries
+  behave, with the other screens unaffected.
+- **Window: 9:00 pm – 6:00 am LA**, overridable via `nightStart` / `nightEnd` in
+  `Settings`. Compared against `deviceNow()`, so a drifting Fire TV clock cannot
+  flip the bedroom into night an hour early. Identical start and end reads as an
+  *empty* window, not a 24-hour one — a typo must not be able to hold a display
+  dark all day when nobody in the house can see the URL that would explain why.
+- **Message** from the `night` Settings key, with a safe default that is true at
+  any hour of any night with no data behind it at all, and never says morning is
+  close. `{days:}` works in it.
+
+### Carve-out: this is not "inferring from time passing"
+
+Written as a comment in the code as well, because it looks like a violation and
+is not. The invariant forbids turning elapsed time into a **claim that something
+happened** — meds taken, a meal eaten, a routine item done. That is why routine
+items are never auto-greyed.
+
+Neither switch does that. Changing palette at 9pm is presentation. Retiring a
+focus message at its until-time **removes** an explicitly-authored statement and
+returns the board to its safe baseline. Time passing here only ever removes or
+restyles information; it never asserts an occurrence. This is an application of
+*"undated information expires"* — the same rule that empties the day row at
+midnight and drops an expired `{days:}` line — not an exception to *"nothing is
+inferred from time."*
+
 ## Deliberate departures from BRIEF.md
 
 Each of these was a decision, not an oversight. Do not "restore" them without
@@ -118,6 +297,15 @@ asking.
    entries carry a green check, then a TODAY divider, then upcoming. A
    forward-only list cannot answer the question that prompted the column.
 5. **Photos, weather, greeting line — not built.** Deliberately out of scope.
+6. **Night and focus are modes of one board, not separate pages.** Two axes,
+   one shared single-message component, one selection function — see above.
+   Resist adding a fourth branch; extend an axis instead.
+7. **A focus takeover is always time-bounded and always same-day.** There is no
+   "until I take it down" option and that is the point. See the safety model
+   above; anything longer-lived belongs in a NOTES line.
+8. **Night omits the reassurance line and uses a lower type ceiling.** Both are
+   deliberate, both are explained above. Do not "fix" either for consistency
+   with focus — the two modes want opposite things from the same component.
 
 ## Invariants — things that will break if changed casually
 
@@ -132,11 +320,14 @@ asking.
   padding to match. Scaling by `min(w/1280, h/720)` letterboxed the TV, because
   Silk's nav bar makes height the binding constraint.
 - **The server's clock wins.** `clockSkewMs` is taken from the endpoint and used
-  for both the displayed time and which day's row to show, so a drifting Fire TV
-  clock cannot display the wrong day.
+  for the displayed time, which day's row to show, night-window switching **and**
+  focus expiry, so a drifting Fire TV clock cannot display the wrong day or go
+  dark at the wrong hour.
 - **Nothing is ever inferred from time passing.** A passed time is not evidence
   something happened. This is why routine items are never auto-greyed, and why
   the `Status` tab's "Ago" is a live formula rather than text written once.
+  Night switching and focus expiry are **not** exceptions — see the carve-out
+  above before touching either.
 - **Observability never blocks the thing observed.** The heartbeat write is
   skipped — never queued — if another display holds the lock, and every failure
   path in it degrades to a warning. The board gets its data regardless.
@@ -158,6 +349,13 @@ asking.
   "today", and the line is **dropped** once the date passes. This replaced a
   hand-typed "Greg here for 13 more days", which is wrong the next day and
   nobody notices. Countdowns are always stored as dates.
+- A **focus message with an until-instant is dated information** and expires by
+  absolute comparison, with no network and without a fetch. One exception to the
+  `{days:}` rule inside it: an expired token does *not* drop the whole message,
+  because the message is already dated by its until-instant and suppressing an
+  acute statement over one stale token would be the wrong failure. Only an
+  expansion to nothing means there is nothing to say — and then there is no
+  takeover at all.
 
 ## Verified vs. not
 
@@ -168,6 +366,50 @@ asking.
   row for today, 40-minute-stale data, countdown expiry.
 - Live cross-origin fetch, `currentonly` scope, `{days:}` arithmetic.
 
+**Verified for the display modes** (64 measured checks in headless Chrome over
+CDP, plus 56 for the endpoint's focus resolution run under Node with stubbed
+Apps Script globals):
+- **The day board is unchanged.** Resolved `--fs` for every box, the header, the
+  standing prompt and the reassurance line are *identical* before and after this
+  change at 1280×720 / 650 / 510 / 800×600 / 1920×1080.
+- No clip, no scroll, no letterbox at all three viewports for: day board, night,
+  focus in the day palette, focus in the night palette, a one-line message, a
+  two-sentence message, and a deliberately abusive ~950-character message
+  (which lands at 27–32px rather than clipping).
+- Mode selection, **as shipped**: bedroom, table, living-room and `unnamed` all
+  stay on the day board at 21:00, 23:30 and 03:00 — nothing goes dark on its own.
+- Mode selection **with `SCREEN_MODES.bedroom.night` flipped to `true` at
+  runtime**: the bedroom flips at 20:59→21:00 and 05:59→06:00 and the table is
+  unaffected — so the flag really is the only gate, and enabling it is a
+  one-line change with no other edits.
+- Focus at 3am in the bedroom is single-message in the **night** palette while
+  focus at 2pm is single-message in the **day** palette.
+- Focus expiry crossing its until-time on the ticking clock alone, with no
+  reload and no fetch; and the night window crossed in both directions the same
+  way.
+- **Offline self-clear from cache**, with the endpoint blocked at the network
+  layer: a cached takeover shows, then retires itself at its until-time and the
+  day board returns.
+- A focus resolved for *yesterday* never appears today even with a live
+  until-instant; an already-passed instant never appears; five shapes of
+  corrupt cached focus (`{}`, no instant, a string instant, a null instant, an
+  empty message) all yield no takeover.
+- `{days:}` expands inside both a focus and a night message; an all-expired
+  `{days:}` focus produces no takeover, and an all-expired night message falls
+  back to the safe default.
+- Server side: DST-correct instant resolution (including 01:30 and 03:30 on the
+  spring-forward morning), the clock-time parser's accepts and rejects, blank →
+  end of day, malformed → end of day + warning, a future date capped + warning,
+  a past until warned about, and a Sheets *time-typed* cell surviving the whole
+  path (Sheets stores "4:00 pm" as a Date, whose `String()` is
+  `"Sat Dec 30 1899 16:00:00 GMT-0752"` — normalised in `settingValue()`).
+- `resolveFocus()` **never throws**, for impossible dates (`2026-99-99`), dates
+  that roll over (`2026-02-30`), the year 9999, all-zeros, and a `{days:}`
+  token typed into the wrong cell. It is the only part of `doGet` that parses
+  free text somebody typed, and an exception there would fail the *whole*
+  response — the board would fall back to cached data over a typo in one cell.
+  It degrades to a warning and no takeover, like the heartbeat.
+
 **Verified on the actual Fire TV:**
 - The board renders correctly in Silk and fills the screen.
 - **Midnight rollover against the live Sheet** — the date line advanced, the
@@ -176,6 +418,14 @@ asking.
   every night.
 
 **Built but NOT yet confirmed against the live system:**
+- **Night and focus end-to-end through the Sheet.** Everything above was
+  measured against the two new code paths directly. The `focus`, `focusUntil`,
+  `night`, `nightStart` and `nightEnd` keys cannot do anything until
+  `apps-script.gs` is **redeployed as a new version** — saving the script
+  changes nothing at the `/exec` URL. Until then the endpoint keeps serving the
+  older script, `focusUntilEpochMs` is absent, `setFocus()` sees no instant and
+  there is simply no takeover: the board runs exactly as it does today. Open
+  `/exec` in a browser afterwards and look for `"focusUntilEpochMs"`.
 - **The heartbeat.** Logic is unit-tested against a stubbed Sheet across every
   failure path (missing tab, lock contention, freshness throttle, device cap,
   hostile `?screen=`). It cannot record anything until the Apps Script is
@@ -188,6 +438,18 @@ asking.
 **Not verified on hardware:**
 - Silk's exact viewport dimensions — inferred from the letterboxing symptom,
   never measured on the device.
+- **Whether she tolerates a dim amber glow in the bedroom overnight.** This is
+  the open question night mode exists to answer, it can only be answered in the
+  room, and **it is why night ships switched off** — flip
+  `SCREEN_MODES.bedroom.night` when somebody is there for the first night. If
+  she cannot, the answer is to switch that display off overnight at the device
+  layer rather than to soften the palette further — see `OPERATIONS.md`.
+
+  If it is merely too bright, there are two independent dials and they are
+  worth trying in this order: **`MSG_MAX_NIGHT`** (currently 72, deliberately
+  provisional — less lit area) and then the **six night tokens** at the top of
+  the CSS (dimmer amber). Both are one-line changes. Nothing else in the night
+  path depends on either value.
 - Whether 25px routine type is readable from her chair.
 - Whether Silk survives days of uptime. There is an hourly `location.replace()`
   reload as a watchdog, untested over a long run.
@@ -198,9 +460,15 @@ asking.
   day. Typing `8:00 am Breakfast` and styling the time would let her answer
   "what's next" against the clock, without the board claiming anything is done.
 - **Medication**, if the support arrangement changes.
-- **Bedroom night variant** — `?screen=` now exists and carries the identity a
-  quieter bedroom layout would key off, but no variant behaviour is built. The
-  bedroom display still must not stay lit overnight.
+- **Per-screen focus.** v1 is global: one takeover on every display. A second
+  tab (`Focus`, one row per screen) would make it targetable — "Greg stepped
+  out" is more useful in the living room than in an empty bedroom. Not built,
+  and not worth building until the global one has been used a few times.
+- **Whether the night message should ever change through the night.** It is one
+  constant string now, which is the safe version. "It's very early, go back to
+  sleep" at 2am versus "it's nearly morning" at 5:30 would be more useful and
+  is *not* a violation of the time invariant (it asserts nothing about her) —
+  but it is more moving parts for a screen nobody can debug at 3am.
 - **Screen Wake Lock is a live experiment, not a result.** Built and reporting
   under `?debug=1`; whether Silk honours it is still unanswered. See below.
 - The calendar shows at most 10 entries. Normally up to 4 past + 6 upcoming,

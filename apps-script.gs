@@ -33,6 +33,12 @@ function doGet(e) {
     days: {},
     events: [],
     settings: {},
+    /* Focus takeover: the raw message plus the ONE thing the client cannot
+       safely work out for itself — when it stops being true, as an absolute
+       instant. See resolveFocus(). */
+    focus: '',
+    focusUntilEpochMs: 0,
+    focusForDate: '',
     screen: '',
     heartbeat: 'off',
     warnings: []
@@ -42,7 +48,8 @@ function doGet(e) {
     var tz = ss.getSpreadsheetTimeZone();
     readDays(ss, tz, out);
     readEvents(ss, tz, out);
-    readSettings(ss, out);
+    readSettings(ss, tz, out);
+    resolveFocus(out);             /* after settings: it reads focus/focusUntil */
     recordHeartbeat(ss, e, out);   /* after settings: it reads alertAfterMinutes */
   } catch (err) {
     out.ok = false;
@@ -185,16 +192,178 @@ function readEvents(ss, tz, out) {
  *
  * "notes" shows every day, under any note on today's row, so a fact that
  * holds for weeks is typed once rather than copied into every row.
+ *
+ * Also: focus / focusUntil / night / nightStart / nightEnd — see resolveFocus()
+ * and the mode selection in index.html.
  */
-function readSettings(ss, out) {
+function readSettings(ss, tz, out) {
   var sh = sheet(ss, 'Settings', out);
   if (!sh) return;
   var rows = sh.getDataRange().getValues();
   for (var r = 1; r < rows.length; r++) {
     var k = norm(rows[r][0]);
-    if (k) out.settings[k] = cell(rows[r], 1);
+    if (k) out.settings[k] = settingValue(rows[r].length > 1 ? rows[r][1] : '', tz);
   }
 }
+
+/**
+ * Type "4:00 pm" into a Sheets cell and Sheets does not store that string — it
+ * stores a Date, and String() on it yields "Sat Dec 30 1899 16:00:00 GMT-0752",
+ * which no clock parser will ever accept. Time-typed cells are the NORMAL way a
+ * family member will fill in focusUntil or nightStart, so normalise here, once,
+ * for every setting:
+ *   a time-only cell  -> "16:00"
+ *   a date-time cell  -> "2026-08-15 16:00"
+ * The 1899-12-30 epoch date is Sheets' sentinel for "no date part".
+ */
+function settingValue(v, tz) {
+  /* Duck-typed, not `instanceof Date`, for the reason spelled out in
+     writeHeartbeat(): that check is realm-sensitive and fails silently on a
+     value produced elsewhere. Failing silently here would mean a family
+     member's perfectly good "4:00 pm" quietly becoming an unparseable
+     "Sat Dec 30 1899 ...". */
+  if (v && typeof v.getTime === 'function' && !isNaN(v.getTime())) {
+    var ymd = Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+    var hm = Utilities.formatDate(v, tz, 'HH:mm');
+    return (ymd < '1900-01-01') ? hm : (ymd + ' ' + hm);
+  }
+  return String(v == null ? '' : v).trim();
+}
+
+
+/* ---------- focus takeover ----------
+ *
+ * A focus message drops the whole board for one big sentence: "Greg stepped
+ * out, back around 4:00". It is the moment the dense day board helps least,
+ * so it is worth suppressing — but ONLY while it is true.
+ *
+ * The failure we are structurally preventing is the board still insisting at
+ * 9pm that Greg is back at 4:00. Stale, wrong, and distressing to someone who
+ * cannot check. So a focus message is never undated: it always carries an
+ * until-INSTANT, and it retires itself by comparison, exactly like a calendar
+ * entry moving into the past. This is the project's "undated information
+ * expires, dated information does not" rule applied to a message.
+ *
+ * Resolved HERE rather than on the client for two reasons:
+ *   - the LA date is already known and already authoritative here, and the
+ *     server's clock is what the board trusts for everything else;
+ *   - an absolute instant cannot be re-interpreted against a later day. A
+ *     cached "4:00 pm" could be; that is precisely how a takeover from
+ *     yesterday would resurrect itself on a display that lost its network.
+ *
+ * Capped at LA end-of-day, always. Anything that needs to outlive today is
+ * not a takeover — it is a NOTES line, where it sits alongside the calendar
+ * instead of suppressing it for days.
+ */
+function resolveFocus(out) {
+  /* Belt and braces around the whole thing. Everything below is defensive
+     already, but this function is the only part of doGet that parses free text
+     a family member typed, and an exception here would fail the WHOLE response
+     — the board would fall back to cached data over a typo in one cell. Same
+     rule as the heartbeat: degrade to a warning, never take the board down. */
+  try { resolveFocusInner(out); }
+  catch (err) {
+    out.focus = ''; out.focusUntilEpochMs = 0; out.focusForDate = '';
+    out.warnings.push('focus: ' + String((err && err.message) || err) + ' - no takeover');
+  }
+}
+
+function resolveFocusInner(out) {
+  var msg = String(out.settings.focus || '').trim();
+  if (!msg) return;                      /* no key, blank cell -> no takeover */
+
+  var today = out.serverLaDate;
+  var endOfDay = laInstantMs(today, 23, 59) + 59999;
+  var raw = String(out.settings.focusuntil || '').trim();
+  var until;
+
+  if (!raw) {
+    /* "I've just stepped out and I don't know how long" is the common case.
+       End of day is the safe answer: bounded, self-clearing, and it never
+       needs a second edit to take the message down. */
+    until = endOfDay;
+  } else {
+    until = parseFocusUntil(raw, today);
+    if (until === null) {
+      /* Deliberately NOT "no takeover". The message itself is well-formed and
+         acute; refusing to show it because the time was typed oddly would
+         suppress something urgent. End of day is bounded and self-clearing, so
+         this can never become a stuck takeover either way. */
+      out.warnings.push('focusUntil "' + raw + '" not understood - using end of day');
+      until = endOfDay;
+    }
+  }
+
+  if (until > endOfDay) {
+    out.warnings.push('focusUntil "' + raw + '" is past end of day - capped. ' +
+                      'Anything longer than today belongs in notes, not focus.');
+    until = endOfDay;
+  }
+  if (until <= out.serverEpochMs) {
+    /* Not an error: an until-time earlier today is how a takeover is taken
+       down without deleting the text. Say so, because from the Sheet it looks
+       identical to a message that is simply not appearing. */
+    out.warnings.push('focusUntil "' + raw + '" has already passed - no takeover');
+  }
+
+  out.focus = msg;
+  out.focusUntilEpochMs = until;
+  out.focusForDate = today;
+}
+
+/** "4:00 pm" | "16:00" | "2026-08-15 4:00 pm" -> epoch ms, or null if it is
+ *  not a time. Null always means "not understood", never a time. */
+function parseFocusUntil(s, todayISO) {
+  var ymd = todayISO, timePart = String(s || '').trim();
+  var m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ]+(.*))?$/.exec(timePart);
+  if (m) {
+    ymd = iso(m[1], m[2], m[3]);
+    timePart = String(m[4] || '').trim();
+    if (!timePart) return null;          /* a bare date names no instant */
+  }
+  var hm = parseClock(timePart);
+  if (!hm) return null;
+  return laInstantMs(ymd, hm.h, hm.m);
+}
+
+function parseClock(s) {
+  var m = /^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\s*$/i.exec(String(s || ''));
+  if (!m) return null;
+  var h = +m[1], mi = m[2] ? +m[2] : 0;
+  var ap = (m[3] || '').toLowerCase().charAt(0);
+  if (mi > 59) return null;
+  if (ap) { if (h < 1 || h > 12) return null; h = h % 12; if (ap === 'p') h += 12; }
+  else if (h > 23) return null;
+  return { h: h, m: mi };
+}
+
+/**
+ * An LA wall-clock time -> an absolute instant, DST included.
+ *
+ * Two passes, because the offset is itself a function of the instant: the
+ * first guess picks an offset, the second confirms it. Without the second
+ * pass a time on a DST-change morning lands an hour out. Written this way
+ * rather than with new Date(string) because Apps Script's parser does not
+ * accept a named timezone.
+ */
+function laInstantMs(ymd, h, m) {
+  var guess = Date.parse(ymd + 'T' + pad2(h) + ':' + pad2(m) + ':00Z');
+  /* "2026-99-99" matches the date shape and parses to NaN. Caught here rather
+     than downstream, where an invalid Date would make Utilities.formatDate
+     throw and take the whole response with it. Null reads as "not understood",
+     which the caller already handles. */
+  if (!isFinite(guess)) return null;
+  var t = guess - laOffsetMs(new Date(guess));
+  var off2 = laOffsetMs(new Date(t));
+  if (guess - off2 !== t) t = guess - off2;
+  return t;
+}
+function laOffsetMs(d) {
+  var z = Utilities.formatDate(d, TZ, 'Z');          /* e.g. "-0700" */
+  var sign = z.charAt(0) === '-' ? -1 : 1;
+  return sign * ((+z.substr(1, 2)) * 3600000 + (+z.substr(3, 2)) * 60000);
+}
+function pad2(n) { return ('0' + n).slice(-2); }
 
 
 /* ---------- heartbeat ----------

@@ -14,8 +14,9 @@ Create a new Google Sheet called **Mom's Board**, then:
 Do this first. Date cells are stored at midnight in the *spreadsheet's* timezone,
 so a Sheet left on the wrong zone shifts every date by a day.
 
-Make three tabs, named exactly **Days**, **Events**, **Settings**. Row 1 is
-headers in every tab. Column order does not matter — the script matches on the
+Make four tabs, named exactly **Days**, **Events**, **Settings** and **Status**
+(the last one stays empty — the board fills it in). Row 1 is headers in the
+first three. Column order does not matter — the script matches on the
 header text — but the spelling does.
 
 ### Tab: `Days` — one row per date
@@ -99,6 +100,11 @@ simply carries a warning and nothing is recorded.
 | reassure | Everything is okay. You are safe and loved. |
 | notes | Greg is here for {days:2026-08-20}. Then Kathy comes. Then Chris. |
 | alertAfterMinutes | 15 |
+| focus | *(usually blank — see §3)* |
+| focusUntil | *(usually blank — see §3)* |
+| night | It's the middle of the night.\|You're home and safe.\|It's not morning yet. |
+| nightStart | 9:00 pm |
+| nightEnd | 6:00 am |
 
 - **standing** — the small grey line under the CALENDAR. Constant, shown every
   day. Break it across lines with a pipe **or** Alt+Enter inside the cell:
@@ -116,6 +122,11 @@ simply carries a warning and nothing is recorded.
   is yours: too low and a slow morning start looks like a fault, too high and a
   dead screen goes unnoticed for hours. The board checks in every 3 minutes, so
   anything above ~10 is safe from false alarms.
+- **focus** and **focusUntil** — a message that takes over the whole screen.
+  Normally both blank. **See §3, "Putting one big message on the screen".**
+- **night**, **nightStart**, **nightEnd** — the quiet bedroom display overnight.
+  **See §4, "The bedroom at night".** All three are optional; leaving them out
+  gives you the defaults above.
 
 ---
 
@@ -139,7 +150,88 @@ information this board exists to prevent.
 
 ---
 
-## 3. Publish the script
+## 3. Putting one big message on the screen
+
+Sometimes the ordinary board is the *least* helpful thing to be showing. She has
+noticed you are not in the house and wants to know where you are; the day's
+routine and the dentist in three weeks are not the answer. For that, put one
+sentence on the screen and nothing else.
+
+Two cells in `Settings`, editable from your phone:
+
+| Key | Value |
+|-----|-------|
+| focus | Greg stepped out, back around 4:00 |
+| focusUntil | 4:00 pm |
+
+Within about three minutes every display drops everything and shows that
+sentence, as large as it will fit, with the date and time still at the top and
+the usual reassurance line at the bottom.
+
+**It takes itself down.** At 4:00 pm the takeover disappears and the normal
+board comes back — you do not have to remember to clear it, and it clears
+itself even if the wifi has been dead all afternoon. That is the whole design:
+a message like this is *worse* than nothing once it has stopped being true.
+
+- **`focusUntil` blank** → it runs until the end of the day. Use this when you
+  don't know how long you'll be.
+- **`focusUntil` is today only.** Type `4:00 pm`, or `16:00`, or use a time cell.
+  Anything later than tonight is pulled back to the end of today.
+- **To take it down early**, clear the `focus` cell — or set `focusUntil` to a
+  time that has already passed.
+- **Anything that stays true for days does not belong here.** "Kathy arrives
+  Wednesday" is a NOTES line or a calendar entry, where it sits *alongside*
+  everything else instead of hiding the calendar for a week. If you find
+  yourself wanting a takeover for tomorrow as well, that is the sign.
+- `{days:2026-08-20}` works inside the message, same as everywhere else.
+
+If nothing appears, open the `/exec` URL in a browser and read the `warnings`
+list — an unrecognised `focusUntil`, or one already in the past, says so there.
+
+---
+
+## 4. The bedroom at night
+
+> **Not switched on yet.** Everything in this section is built and working, but
+> no display currently changes at night — all three show the normal board around
+> the clock. It stays that way until somebody is in the house to watch the first
+> night of it, because "is a dim glow in her room at 3am alright?" is not a
+> question anyone can answer from a screenshot. Turning it on is a one-line code
+> change (`SCREEN_MODES` in `index.html`), not a Sheet edit. **You can still fill
+> in the settings below now** — they simply sit there until the switch is
+> flipped, and you can preview the result today with the demo URL at the end of
+> this file.
+
+The plan is: the table and living-room displays show the normal board all day
+and all night, and **the bedroom display is the one that changes.** Between 9pm
+and 6am it goes dark — near-black background, dim amber text, no white or blue
+— and shows the date, the time, and one short message. Nothing else.
+
+| Key | Value |
+|-----|-------|
+| night | It's the middle of the night.\|You're home and safe.\|It's not morning yet. |
+| nightStart | 9:00 pm |
+| nightEnd | 6:00 am |
+
+- All three are optional. Leave them out and you get exactly what is shown above.
+- A **pipe** `|` (or Alt+Enter) forces a line break, same as the standing prompt.
+- Keep it true at *any* hour of the night, and keep it kind. It has to work at
+  2am and at 5am with nobody there to explain it, so it should never say morning
+  is close.
+- The times accept `9:00 pm`, `21:00`, or a time-formatted cell.
+- A **focus message overrides night**: if you raise one at 2am, the bedroom shows
+  it in the dark palette rather than the night message. That is intentional —
+  the acute thing wins, it just doesn't shout.
+
+Which screens do this is set in the code, not the Sheet (`SCREEN_MODES` in
+`index.html`). Right now **every screen is set to `false`**, which is why
+nothing changes at night yet. The bedroom is the one meant to be turned on; if
+the living room should ever go quiet at night too, that is the same one-line
+change.
+
+---
+
+## 5. Publish the script
 
 1. In the Sheet: **Extensions → Apps Script**.
 2. Delete whatever is there, paste all of `apps-script.gs`, **Save**.
@@ -199,9 +291,21 @@ what the URL serves. This catches everyone once.
 > a new version — the URL keeps serving the older script until you do. Open the
 > `/exec` URL in a browser afterwards: `"heartbeat":"ok"` means it is recording.
 
+> **So do `focus` and `focusUntil` (§3).** Until the redeploy the old script
+> keeps serving, the takeover simply never appears, and the board carries on
+> exactly as before — no error, nothing broken, nothing on screen. Open `/exec`
+> and look for `"focusUntilEpochMs"`: if that word is not in the response, the
+> deployment is still the old version.
+
+**And then be patient.** After a redeploy, a change can take up to ~10 minutes
+to reach a TV — GitHub Pages caches the page for 10 minutes — plus up to an hour
+for that display's hourly reload. Nothing has failed; it just has not arrived
+yet. (A `focus` message is different: it is *data*, not code, so it appears
+within about three minutes with no redeploy at all.)
+
 ---
 
-## 4. One URL per display
+## 6. One URL per display
 
 Bookmark a different URL on each TV so each one identifies itself:
 
@@ -238,7 +342,7 @@ the page at all.
 
 ---
 
-## 5. What the board does when things go wrong
+## 7. What the board does when things go wrong
 
 Designed to be wrong in the safe direction rather than confidently wrong.
 
@@ -250,7 +354,13 @@ Designed to be wrong in the safe direction rather than confidently wrong.
 | Sheet unreachable from a cold start | Date, time, the standing prompt and the reassurance line — all of which are true regardless. |
 | A tab or column is missing | That section is empty; the rest works. The response includes a `warnings` list you can see by opening the `/exec` URL in a browser. |
 | No `Status` tab, or two displays writing at once | The heartbeat is skipped for that request and noted in the response. The board still gets its data — observability never blocks the thing being observed. |
-| The Fire TV's clock is wrong | The board uses the server's clock for both the displayed time and which day to show. |
+| The Fire TV's clock is wrong | The board uses the server's clock for the displayed time, which day to show, when night starts, and when a takeover ends. |
+| A takeover is up and the wifi dies | It still disappears at its own `focusUntil` — the deadline travels with the message, so no network is needed to take it down. |
+| A takeover is still cached the next day | It never reappears. The deadline is an exact moment, not a clock time, so "4:00 pm" cannot be re-read against a new day. |
+| `focusUntil` is set past tonight | Pulled back to the end of today, with a note in `warnings`. Anything longer belongs in a NOTES line. |
+| `focusUntil` is unreadable ("soonish") | The message still shows, until the end of today, and `warnings` says so. Better than silently swallowing something urgent. |
+| `focus` is blank or missing | No takeover. The ordinary board, exactly as before. |
+| `night` is blank or missing | The bedroom still goes dark at night and shows the built-in message. |
 
 The rule behind all of it: **undated information expires, dated information does
 not.** Yesterday's plans are never shown as today's. A dated appointment is
@@ -258,7 +368,7 @@ still a fact about that date no matter how old the fetch is.
 
 ---
 
-## 6. Refresh behaviour
+## 8. Refresh behaviour
 
 - Sheet is re-read every **3 minutes**, with a cache-busting parameter.
 - The page fully reloads **hourly**, as protection against Silk misbehaving over
@@ -271,3 +381,26 @@ still a fact about that date no matter how old the fetch is.
 
 `https://gpapciak.github.io/reminders/?demo=1` renders sample content with no
 Sheet at all — useful for checking layout. The bare URL never shows demo data.
+
+With `?demo=1` you can also see the other two modes without touching the Sheet
+and without waiting for 9pm. Add any of these to that URL:
+
+| Add | Shows |
+|---|---|
+| `&night=1` | the night screen |
+| `&focus=Greg stepped out, back around 4:00` | a takeover |
+| `&focusuntil=4:00 pm` | …with that deadline |
+| `&nightmsg=…` | try a different night message |
+| `&now=2026-08-15T22:30` | pretend it is this time; the clock runs on from there |
+| `&screen=bedroom` | the display that has a night mode |
+
+Example — what the bedroom *would* look like at half past eleven. `&night=1`
+is what makes it appear: night is switched off on every real display for now
+(§4), so without the force you get the ordinary board.
+
+```
+https://gpapciak.github.io/reminders/?demo=1&screen=bedroom&night=1&now=2026-08-15T23:30
+```
+
+These only work alongside `demo=1`, so the three bookmarked TV URLs can never
+trip one by accident.

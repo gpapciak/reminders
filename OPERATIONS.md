@@ -13,19 +13,57 @@ them or proposes a page-side fix for a problem the page cannot solve.
 
 ## Target behaviour
 
-Not 24/7. That was the original instinct and it was dropped.
+**Revised.** The original target was "off overnight, everywhere". That has been
+split, because the two living-area displays turned out not to need it and the
+bedroom needs something more specific than "off".
 
-| | |
-|---|---|
-| **Morning** | displays turn on automatically |
-| **Daytime** | board continuously available, no intervention, self-recovering |
-| **Evening** | secondary displays off; table display maybe stays up longer |
-| **Overnight** | displays off — no illuminated bedroom, no wasted power |
-| **Next morning** | starts again reliably |
+| | Table + living room | Bedroom |
+|---|---|---|
+| **Morning** | already on | display turns on / already on |
+| **Daytime** | board continuously available, self-recovering | same |
+| **Evening** | board stays up | board until 9pm |
+| **Overnight** | **board stays up — running 24/7 works** | **night variant**, once switched on: near-black screen, dim amber, date + time + one short line. **Currently the day board, like the others** |
+| **Next morning** | continuous | back to the full board at 6am |
 
-The governing constraint: **she cannot troubleshoot.** No opening Silk, no
-bookmarks, no typing URLs, no switching HDMI inputs, no clearing a "No Signal"
-screen. Display on → board appears. Anything else is a failure.
+**Why the change.** Running the two living-area displays around the clock was
+tried and it is fine — no wasted attention, no complaints, and it removes the
+whole class of "did the morning power-on work?" failures, which is a real
+reliability gain given that recovery has to happen from 5,000 miles away. A
+screen that never goes off cannot fail to come back.
+
+**The bedroom is different, and it is still an open question.** It is the one
+place a lit screen is a problem, so instead of staying on the day board it can
+switch at 9pm to a night variant (see *Display modes* in `HANDOFF.md`):
+near-black ground, warm low-luminance amber, no white and no blue — both are
+more alerting and worse for sleep — showing the date, the time and one calm
+line. The reasoning is that waking at 3am disoriented is exactly when knowing
+"it is the middle of the night, you are home, it is not morning yet" is worth
+most, and a dark screen you can read is more use than a dead one.
+
+**That is a hypothesis, not a result — so it is not switched on.** The night
+variant is built, tested and deployed, and `SCREEN_MODES.bedroom.night` is
+`false`. Every display currently shows the day board around the clock. It gets
+turned on when somebody is in the house for the first night of it, which is the
+same trip that answers whether she tolerates it at all. Shipping it dark-by-
+default would mean the first person to find out is her, alone, at 3am.
+
+If she cannot sleep with a dim glow in the room, the answer is to switch that
+display off overnight at the device layer — the original target for the
+bedroom, unchanged and still valid. Do not respond by dimming the palette
+further and trying again; if a glow is the problem, less glow is still the
+problem. If it is merely too bright, that is a different finding and there are
+two dials for it (`MSG_MAX_NIGHT`, then the night colour tokens).
+
+The governing constraint is unchanged: **she cannot troubleshoot.** No opening
+Silk, no bookmarks, no typing URLs, no switching HDMI inputs, no clearing a "No
+Signal" screen. Display on → board appears. Anything else is a failure.
+
+### A consequence worth noticing
+
+Overnight-off for the living-area displays was one of the reasons the Alexa /
+CEC scheduling work mattered. It matters less now: those two want *nothing*
+scheduled, only to stay up and recover themselves. Scheduled power is now a
+bedroom question, and only if the night variant fails its test.
 
 ---
 
@@ -35,7 +73,7 @@ screen. Display on → board appears. Anything else is a failure.
 |---|---|---|
 | **Table (primary)** | Insignia 24" F20, **Fire TV built in**, 720p | Board already runs here. Screensaver can be set to Never; sleep timer maxes at 240 min. Behaves differently from the external Sticks. |
 | **Living room** | LG TV + Fire TV Stick | Main test rig for external sticks. CEC = "SIMPLINK". |
-| **Bedroom** | Hisense TV + Fire TV Stick | **Must not stay lit overnight.** |
+| **Bedroom** | Hisense TV + Fire TV Stick | **Must not be lit like a day board overnight.** A night variant is built for it (9pm–6am: dark screen, dim amber, one line) but is **not switched on** — that happens with somebody in the house. Whether it is tolerable in the room is untested; if not, this display goes off overnight instead. |
 
 ### Two incompatible Stick architectures
 
@@ -104,7 +142,26 @@ for one; the fix is at the device layer.
 - **`?screen=table` / `?screen=living-room` / `?screen=bedroom`** — device
   identity, sanitised, defaulting to `unnamed` so an unlabelled display appears
   as a row rather than silently missing. Carried across the hourly reload.
-  This is also the identity a bedroom night-variant will key off.
+  **This is now also what selects the night variant** — from a map in
+  `index.html`, bedroom only once it is enabled. A display that loses its
+  `?screen=` would therefore lose its night mode as well as its heartbeat row,
+  which is one more reason `reloadUrl()` rebuilds the query instead of
+  replacing it.
+
+- **The night variant, and the focus takeover.** Both are page-level, both are
+  described in `HANDOFF.md`; the operational points are:
+  - night is **deployed but switched off** on every screen — one boolean —
+    until somebody is there for the first night; the focus takeover is live now;
+  - once on, the bedroom goes dark 9pm–6am on the server's clock, so a drifting
+    Fire TV clock cannot switch it at the wrong hour;
+  - a **focus message** ("Greg stepped out, back around 4:00") can be raised
+    from a phone by typing two cells in the Sheet, appears on every display
+    within ~3 minutes, and **takes itself down at its own deadline even with no
+    network** — which matters here, because taking it down is otherwise a
+    remote action that could fail;
+  - `?debug=1` now reports the current mode, so "the bedroom looks dark" can be
+    distinguished from "the bedroom is off" through a Tapo camera without
+    guessing.
 
 - **Screen Wake Lock — an experiment with a visible answer, NOT a fix.** Under
   `?debug=1` a corner readout reports `ACTIVE / RELEASED / UNSUPPORTED / DENIED`
@@ -218,11 +275,22 @@ assume forum answers apply to these OS versions.
 3. Can the sleep timeout be changed (and via what, per OS)?
 4. Can Alexa wake the device? Does CEC reliably wake the TV and pick the input?
 5. After waking, what is on screen — and can Alexa launch Silk, or a named app?
-6. Can scheduled routines do morning-on / night-off?
+6. Can scheduled routines do morning-on / night-off? **Now only a bedroom
+   question** — the living-area displays want to stay up, not be scheduled.
 7. Can the Oregon devices be controlled from France on the same account?
 8. What does ADB add on the 2024 Fire OS Stick?
 9. Would a WebView wrapper materially improve reliability?
 
-**Not the goal:** "never sleep." The goal is awake 12–16 hours, deliberately off
-overnight, reliably back in the morning, recoverable remotely, verifiable
-remotely. Prefer the simplest thing that achieves that.
+10. **Does she tolerate a dim glow in the bedroom overnight?** The one question
+    the night variant exists to answer, and the only one on this list that
+    cannot be answered by testing hardware — it needs a night in the room, with
+    somebody there. This is why the variant ships switched off; enabling it is
+    one boolean and the first thing to do on that trip. A clean "no" is a good
+    result: it reinstates off-overnight for that display and nothing else
+    changes.
+
+**Not the goal, restated.** The earlier version of this said "awake 12–16 hours,
+deliberately off overnight". That now applies to the **bedroom only**, and only
+if the night variant fails. For the table and living room the goal is the
+opposite and simpler: stay up, recover without help, be verifiable from a phone
+in another country. Prefer the simplest thing that achieves that.

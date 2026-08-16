@@ -29,6 +29,30 @@
     --ok-bg:#e3f1e4; --ok-ink:#245c33; --ok-edge:#4f9c63;
     --soon-bg:#fbeecf; --soon-ink:#6b4a12; --soon-edge:#d69a2c;
   }
+
+  /* ---- NIGHT PALETTE -------------------------------------------------
+     One of the two display axes (see the mode selection in the script).
+     Same token NAMES, different values, so every rule below this point is
+     palette-agnostic and neither layout has to know which palette it is in.
+
+     Near-black ground with warm low-luminance amber text. Deliberately no
+     white and no blue anywhere: both are more alerting and worse for sleep,
+     which is the entire reason a bedroom display gets a night variant rather
+     than just staying on the day board. If she finds it too bright in the
+     room, dim it HERE — every night rule reads these six values.
+
+     Set on <html>, not on .stage, so the letterboxed margin around the stage
+     matches instead of framing the board in a lighter rectangle. */
+  :root[data-palette="night"]{
+    --paper:#080603; --card:#0e0b06; --ink:#c0831f;
+    --muted:#7a5219; --soft:#9a6a22; --line:#241a10;
+    --done:#8a6a2a; --done-ink:#8a6a2a; --mark:#8a6a2a; --note-ink:#b07d29;
+  }
+  /* .grid is display:grid and .single is display:flex, either of which beats
+     the UA's [hidden]{display:none}. Only one layout is ever in the DOM flow —
+     a hidden box must not be measurable, or auto-fit would size against it. */
+  [hidden]{ display:none !important; }
+
   *{ box-sizing:border-box; margin:0; padding:0; }
   html,body{
     width:100%; height:100%; background:#000; overflow:hidden;
@@ -155,6 +179,34 @@
 
   .empty{ font-size:var(--fs); font-weight:600; color:var(--muted); }
 
+  /* ---- SINGLE MESSAGE: the other layout axis -------------------------
+     One dominant sentence where the grid would otherwise be. Used by BOTH
+     night and focus, so the fit/clip invariants are solved once rather than
+     twice, and a single centred block is the easiest possible case for the
+     measured auto-fit.
+
+     The ceiling is high on purpose: a short message ("Greg stepped out, back
+     around 4:00") should land enormous, because the whole point of a takeover
+     is that it reads from across the room at a glance. Unlike the header this
+     one WRAPS — fitMessage() steps it down until it fits, so a long message
+     simply arrives smaller instead of clipping. */
+  .single{
+    flex:1 1 auto; min-height:0; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    /* A starting value only: fitMessage() overwrites it inline before this box
+       is ever shown, from MSG_MAX or MSG_MAX_NIGHT. Kept in step with MSG_MAX
+       so a stylesheet read on its own is not misleading. */
+    --fs:160px;
+  }
+  .single .msg{
+    /* flex:0 0 auto — the message must report its NATURAL height so
+       fitMessage() can compare it against the box; a shrinkable item would
+       report the squashed height and the measurement would always "fit". */
+    flex:0 0 auto; max-width:92%; text-align:center;
+    font-size:var(--fs); font-weight:800; line-height:1.18;
+    letter-spacing:-1px; overflow-wrap:break-word;
+  }
+
   /* ---- ?debug=1 readout ----
      Fixed to the VIEWPORT and deliberately outside .stage: it must never
      enter the stage's flow, its transform, or fitBlock()'s measurements.
@@ -182,7 +234,7 @@
         <div class="clock" id="clock">—</div>
       </div>
 
-      <div class="grid">
+      <div class="grid" id="grid">
         <div class="col">
           <div class="card" id="card-today">
             <!-- "ROUTINE", not "TODAY": this describes the shape of her day so
@@ -206,6 +258,13 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- The other layout: one message where the grid was. Night and focus
+           both render through this, differing only in palette and in whether
+           the reassurance line below is kept. -->
+      <div class="single" id="single" hidden>
+        <div class="msg" id="single-msg"></div>
       </div>
 
       <div class="reassure" id="reassure">Everything is okay. You are safe and loved.</div>
@@ -242,6 +301,70 @@ const DEFAULT_STANDING =
   'Feeling hungry? Eat some food. Feeling thirsty? Drink some water. Stay hydrated.';
 const DEFAULT_REASSURE = 'Everything is okay. You are safe and loved.';
 
+/* Night's own safe constant. Shown if the Sheet has no "night" key, if the
+   Sheet is unreachable, or if the authored one expands to nothing. It has to
+   be true at any hour of any night with no data behind it at all — so it says
+   only what is always true, and never that morning is close.
+
+   The pipes force the line breaks rather than leaving them to whatever width
+   the message happens to fit in, so the three statements read as three and the
+   last line is never a stray "morning yet." */
+const DEFAULT_NIGHT =
+  "It's the middle of the night.|You're home and safe.|It's not morning yet.";
+
+/* Night window, LA wall clock. Overridable per household via the Settings tab
+   (nightStart / nightEnd); these are the fallbacks. */
+const NIGHT_START_MIN = 21*60;   /* 9:00 pm */
+const NIGHT_END_MIN   =  6*60;   /* 6:00 am */
+
+/* Which displays get a night variant, keyed by ?screen=. A screen not listed
+   here (including "unnamed") stays on the day board.
+
+   The table and living-room displays have run the day board around the clock
+   successfully — that is confirmed behaviour and changing it would be a
+   regression, not an improvement.
+
+   BEDROOM IS OFF ON PURPOSE, AND THIS IS THE ONE LINE TO FLIP.
+   Night mode is built, measured and ready; it is not switched on because
+   whether a dim glow in her room at 3am is tolerable can only be found out in
+   that room, and the person who has to watch it happen is not there yet. A
+   feature that changes what a bedroom looks like overnight should not go live
+   ahead of somebody being present to see the first night of it.
+
+   To enable: set bedroom's night to true, push, and expect it on that display
+   at the next hourly reload. Nothing else changes — every other night code
+   path is already live and already tested, and this flag is the only gate. */
+const SCREEN_MODES = {
+  'bedroom':     { night:false },   /* <- flip to true after the in-room test */
+  'table':       { night:false },
+  'living-room': { night:false }
+};
+
+/* Ceiling and floor for the single-message type. The floor is the same 15px
+   the cards use, and it is a floor for the same reason: nothing may ever clip,
+   whatever anybody types into the Sheet. A takeover that has to shrink that
+   far is being misused — that is a NOTES line, not a takeover — but the board
+   answers that by rendering it small and whole, never by cutting it off.
+
+   Night gets a LOWER ceiling than focus, and this is a deliberate difference
+   rather than an oversight. Both use the same component and the same auto-fit,
+   but they want opposite things from it: a takeover should be as big as the
+   screen allows, because being unmissable is its whole job, while the night
+   message wants to be legible from the bed and no larger — at the full ceiling
+   it fills the panel edge to edge and floods a dark bedroom with amber light,
+   which is exactly what the night palette exists to avoid. Measured at 1280x650
+   the default night text lands on three calm lines with air around them.
+
+   MSG_MAX_NIGHT IS PROVISIONAL — 72 is a starting point, not a settled number,
+   and it is a candidate to come DOWN. That the direction was right was decided
+   by looking at the render; how far is right cannot be, because the question is
+   how much light a dark bedroom gets at 3am, which no headless measurement can
+   answer. It has to be seen in the room, on the same night as the "does she
+   tolerate a dim glow at all" test (see HANDOFF.md). Tune it there. Do not
+   treat 72 as load-bearing, and do not let a later edit "restore" it to
+   MSG_MAX for consistency with focus — the two modes want opposite things. */
+const MSG_MAX = 160, MSG_MAX_NIGHT = 72, MSG_MIN = 15;
+
 /* ---- URL flags and device identity ---------------------------------
    ?demo=1   sample content, no endpoint — layout work only.
    ?debug=1  on-screen diagnostics readout (wake lock, heartbeat, data age).
@@ -253,6 +376,24 @@ function paramOf(name){
 }
 const DEMO  = /(^|[?&])demo=1(&|$)/.test(location.search);
 const DEBUG = /(^|[?&])debug=1(&|$)/.test(location.search);
+
+/* ---- Test hooks — ALL require ?demo=1 -------------------------------
+   Night and focus are driven by the clock and by the Sheet, so neither is
+   reachable by hand on a running board and neither can be checked without
+   waiting for 9pm or editing live data a household depends on. These make
+   every combination openable in a browser:
+
+     ?demo=1&night=1              force night   (&night=0 forces it off)
+     ?demo=1&focus=Back+at+4      force a takeover
+             &focusuntil=4:00 pm  ...until this LA time  (default: end of day)
+     ?demo=1&nightmsg=…           override the night text
+     ?demo=1&now=2026-08-15T22:30 pretend it is this LA wall-clock time;
+                                  the clock then ticks on from there
+     ?demo=1&screen=bedroom       plus the normal per-screen config
+
+   Gated on DEMO so a bookmarked TV URL can never trip one of them, and so
+   nothing here is reachable on the live board by a stray query string. */
+const TEST_NIGHT = DEMO?paramOf('night'):'';
 
 /* The endpoint is public, so anything from a query string is untrusted before
    it reaches the Sheet. Sanitised here AND again server-side. Never blank: an
@@ -324,6 +465,37 @@ function daysBetween(fromISO,toISO){
   return Math.round((b.getTime()-a.getTime())/86400000);
 }
 
+/* ---- LA wall clock, for the night window ---------------------------
+   hour12:false rather than hourCycle:'h23' — the older option is understood
+   by every engine this has to run in, and midnight coming back as "24" is
+   handled by the %24 below. */
+const fmtLAParts=new Intl.DateTimeFormat('en-US',{timeZone:TZ,
+  year:'numeric',month:'2-digit',day:'2-digit',
+  hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+function laParts(d){
+  const p={}; fmtLAParts.formatToParts(d).forEach(function(x){ p[x.type]=x.value; });
+  return p;
+}
+/** Minutes since LA midnight. Uses the SERVER-SKEWED clock via its caller, so
+ *  a drifting Fire TV cannot flip the bedroom into night an hour early. */
+function laMinutes(d){
+  const p=laParts(d);
+  return (+p.hour%24)*60 + (+p.minute);
+}
+/** "9:00 pm" / "21:00" / "6am" -> minutes since midnight, or null if it is not
+ *  a clock time. Null always means "I did not understand this", never a time. */
+function parseClockMin(v){
+  const m=/^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\s*$/i.exec(String(v==null?'':v));
+  if(!m) return null;
+  let h=+m[1]; const mi=m[2]?+m[2]:0;
+  const ap=(m[3]||'').toLowerCase().charAt(0);
+  if(mi>59) return null;
+  if(ap){ if(h<1||h>12) return null; h=h%12; if(ap==='p') h+=12; }
+  else if(h>23) return null;
+  return h*60+mi;
+}
+function clockMinOr(v,fallback){ const n=parseClockMin(v); return n===null?fallback:n; }
+
 /* ---- {days:YYYY-MM-DD} ------------------------------------------------
    Countdowns typed by hand go stale silently ("Greg here for 13 more days"
    is wrong tomorrow and nobody notices). Instead the Sheet holds the DATE
@@ -372,6 +544,31 @@ function fitBlock(cardId, max, min){
 function fitLine(el,max,min){
   el.style.fontSize=max+'px';
   for(let s=max; s>min && el.scrollWidth>el.clientWidth; ){ s-=1; el.style.fontSize=s+'px'; }
+}
+/* The single-message block. Same contract as fitBlock() — the CSS size is a
+   ceiling and this only ever shrinks — with two differences:
+
+   1. Height is measured as the MESSAGE's own height against the box's, not
+      with scrollHeight. The box centres its child, and a centred flex item
+      that overflows spills equally above and below; the half above the top
+      edge is invisible to scrollHeight, so an overflowing message would
+      measure as fitting. offsetHeight sidesteps that entirely. scrollWidth
+      then covers the one case wrapping cannot fix: a single word longer
+      than the line.
+   2. Coarse pass then fine pass. This ceiling is ~6x a card's, so a 1px walk
+      from the top would be ~130 reflows on a Fire TV every time the message
+      changes; 6px steps down and at most five back up gets the same answer. */
+function fitMessage(max,min){
+  const box=document.getElementById('single');
+  const msg=document.getElementById('single-msg');
+  function set(s){ box.style.setProperty('--fs',s+'px'); }
+  function fits(){
+    return msg.offsetHeight<=box.clientHeight && msg.scrollWidth<=msg.clientWidth+1;
+  }
+  let s=max; set(s);
+  while(s>min && !fits()){ s=Math.max(min,s-6); set(s); }
+  while(s<max){ set(s+1); if(!fits()){ set(s); break; } s+=1; }
+  return s;
 }
 
 /* 4. RENDER */
@@ -459,7 +656,33 @@ function emptyRow(text){
   const li=document.createElement('li'); li.className='empty'; li.textContent=text; return li;
 }
 
-function render(data,todayISO){
+/* Swap which layout is in the DOM flow. Never both: a hidden box has no
+   measurable height, and auto-fit measuring against the wrong one is exactly
+   how a layout silently collapses to its minimum type size. */
+function showLayout(which){
+  document.getElementById('grid').hidden   = which!=='full';
+  document.getElementById('single').hidden = which!=='single';
+}
+
+/* The single-message layout — one component, used by BOTH night and focus.
+   Header stays (orientation is the whole point of this layout: the date and
+   the time are the two questions the board exists to answer, and they are
+   true in every mode). Middle is the message. Bottom is the reassurance line
+   for focus; night omits it — the night message is itself the reassurance,
+   and a second line of glowing text in a dark bedroom is the opposite of
+   minimal. */
+function renderSingle(text,bottomLine,ceiling){
+  showLayout('single');
+  setTextWithBreaks(document.getElementById('single-msg'),text);
+  const re=document.getElementById('reassure');
+  re.hidden=!bottomLine;
+  if(bottomLine) re.textContent=bottomLine;
+  fitMessage(ceiling,MSG_MIN);
+}
+
+function renderFull(data,todayISO){
+  showLayout('full');
+  document.getElementById('reassure').hidden=false;
   /* TODAY'S ROUTINE — deliberately NOT auto-greyed as the day goes on. We
      don't know that something actually happened, and guessing is how you get a
      wrong answer to "did that happen yet?". It is also not hers to complete:
@@ -529,14 +752,30 @@ function render(data,todayISO){
               undated things expire, dated things don't. */
 let dayRow=null;      /* { forDate, at, today[], notes[], reassure }        */
 let events=null;      /* { at, list[] }                                     */
-let settings={};      /* { standing, reassure, notes }                      */
+let settings={};      /* { standing, reassure, notes, night, nightstart… }  */
 let clockSkewMs=0;    /* server time - device time; Fire TV clocks drift    */
 let inFlight=false, lastOkAt=0, lastError=null, hbState='?';
 
+/* Focus: an acute, TIME-BOUNDED takeover. Cached like everything else, which
+   is only safe because it carries an absolute instant — see activeFocus(). */
+let focusMsg='';        /* raw text, {days:} not yet expanded               */
+let focusUntilMs=0;     /* absolute instant, resolved by the SERVER         */
+let focusForDate='';    /* the LA date the server resolved it for           */
+
 function deviceNow(){ return new Date(Date.now()+clockSkewMs); }
 
+function setFocus(msg,untilMs,forDate){
+  const m=String(msg==null?'':msg).trim();
+  const u=(typeof untilMs==='number'&&isFinite(untilMs))?untilMs:0;
+  /* All three or none. A message with no instant is not a focus message —
+     it is a stuck one waiting to happen. */
+  if(!m||u<=0){ focusMsg=''; focusUntilMs=0; focusForDate=''; return; }
+  focusMsg=m; focusUntilMs=u; focusForDate=String(forDate||'');
+}
+
 function save(){
-  try{ localStorage.setItem(STORE_KEY,JSON.stringify({d:dayRow,e:events,s:settings})); }
+  try{ localStorage.setItem(STORE_KEY,JSON.stringify({d:dayRow,e:events,s:settings,
+       f:{m:focusMsg,u:focusUntilMs,d:focusForDate}})); }
   catch(err){}
 }
 function restore(){
@@ -546,6 +785,7 @@ function restore(){
     if(o.d&&o.d.forDate) dayRow=o.d;
     if(o.e&&Object.prototype.toString.call(o.e.list)==='[object Array]') events=o.e;
     if(o.s&&typeof o.s==='object') settings=o.s;
+    if(o.f&&typeof o.f==='object') setFocus(o.f.m,o.f.u,o.f.d);
   }catch(err){}
 }
 
@@ -582,6 +822,12 @@ function loadData(){
       dayRow={ forDate:todayISO, at:Date.now(),
                today:(row&&row.today)||[], notes:(row&&row.notes)||[],
                reassure:(row&&row.reassure)||'' };
+      /* The until-instant is resolved SERVER-side, where the LA date is
+         already known and already authoritative, and capped there at LA
+         end-of-day. The client stays dumb: one absolute comparison, made at
+         paint time. Anything missing or malformed arrives as 0 and setFocus()
+         turns the whole thing off — a takeover is never the failure mode. */
+      setFocus(p.focus,p.focusUntilEpochMs,p.focusForDate);
       hbState=String(p.heartbeat||'?');
       lastOkAt=Date.now(); lastError=null;
       save();
@@ -594,9 +840,104 @@ function loadData(){
     });
 }
 
-/* 7. PAINT — assemble what to show from whatever state we have */
+/* 7. DISPLAY MODES — two independent axes, three combinations.
+   ------------------------------------------------------------------
+     PALETTE   day (warm paper/ink)  |  night (near-black, amber)
+     LAYOUT    full (header+grid+reassurance)  |  single-message
+
+     day board  = day   + full            (what has always been here)
+     night      = night + single-message  (the night orientation text)
+     focus      = day   + single-message  (an ad-hoc takeover)
+                  ...or night + single-message, at 3am in the bedroom.
+
+   Evaluated on every paint, never latched, so nothing has to be switched
+   off again by the thing that switched it on.
+
+   CARVE-OUT — read this before "fixing" it. The invariant "nothing is ever
+   inferred from time passing" forbids turning elapsed time into a CLAIM THAT
+   SOMETHING HAPPENED: meds taken, a meal eaten, an item on the routine done.
+   That is why routine items are never auto-greyed. Neither switch below does
+   that. Changing palette at 9pm is presentation. Retiring a focus message at
+   its until-time REMOVES an explicitly-authored statement and returns the
+   board to its safe baseline. Time passing here only ever removes or restyles
+   information; it never asserts that an event occurred. This is the same
+   "undated information expires" rule that empties the day row at midnight and
+   drops an expired {days:} line — applied to a message. */
+
+function screenAllowsNight(){
+  const c=SCREEN_MODES[SCREEN];
+  return !!(c&&c.night);        /* unlisted screens, incl. "unnamed", stay day */
+}
+function inNightWindow(now){
+  const s=clockMinOr(settings.nightstart,NIGHT_START_MIN);
+  const e=clockMinOr(settings.nightend,  NIGHT_END_MIN);
+  /* Identical start and end reads as an empty window, not a 24-hour one. A
+     typo in the Sheet must not be able to hold a display in night mode all
+     day, when nobody in the house can see the URL that would prove why. */
+  if(s===e) return false;
+  const m=laMinutes(now);
+  return s>e ? (m>=s||m<e)      /* the normal case: the window crosses midnight */
+             : (m>=s&&m<e);
+}
+function isNight(now){
+  if(TEST_NIGHT==='1') return true;
+  if(TEST_NIGHT==='0') return false;
+  return screenAllowsNight()&&inNightWindow(now);
+}
+
+/* The focus safety model, in one function.
+   Returns the text to take over with, or '' for "no takeover, carry on". */
+function activeFocus(todayISO,now){
+  if(!focusMsg||!(focusUntilMs>0)) return '';
+  /* Two guards, and they fail in the same direction — off.
+     - The ABSOLUTE instant is what makes a cached focus message safe to keep:
+       a bare "4:00 pm" re-read against tomorrow would resurrect a stale
+       takeover, an instant cannot. It also needs no network to expire, and
+       it is compared HERE, at paint time, not once when the data arrived.
+     - The date it was resolved for caps it at that day even if a nonsense
+       number somehow got through, so "Greg is gone until 4:00" can never
+       still be on the screen at 9pm, let alone tomorrow. */
+  if(focusForDate&&focusForDate!==todayISO) return '';
+  if(now.getTime()>=focusUntilMs) return '';
+  /* {days:} works in a takeover too. Note this does NOT use expandList's
+     drop-the-whole-line-if-expired rule: this message is dated by its
+     until-instant, so it does not need the countdown to date it, and
+     suppressing an acute message over one stale token would be the wrong
+     failure. Only an expansion to nothing means there is nothing to say. */
+  return expandDays(focusMsg,todayISO).text;
+}
+
+function nightMessage(todayISO){
+  const raw=String(settings.night||'').trim()||DEFAULT_NIGHT;
+  return expandDays(raw,todayISO).text||DEFAULT_NIGHT;
+}
+
+/* Selection order, top to bottom. One place, so the three modes cannot
+   drift apart. */
+function selectMode(now,todayISO){
+  const night=isNight(now);
+  const focus=activeFocus(todayISO,now);
+  if(focus) return { mode:'focus', layout:'single', night:night,  message:focus };
+  if(night) return { mode:'night', layout:'single', night:true,
+                     message:nightMessage(todayISO) };
+  return      { mode:'day',   layout:'full',   night:false, message:'' };
+}
+function modeKey(m){ return m.mode+'|'+(m.night?'n':'d')+'|'+m.message; }
+
+/* Both axes land on <html> as data attributes. The palette one is what the CSS
+   reads; the mode one is not styled at all — it is there so the current state
+   is legible from outside (devtools, the ?debug=1 readout, the headless
+   verification harness) instead of being locked inside a closure variable. */
+function applyMode(m){
+  const root=document.documentElement;
+  root.setAttribute('data-palette',m.night?'night':'day');
+  root.setAttribute('data-mode',m.mode);
+}
+
+/* 8. PAINT — assemble what to show from whatever state we have */
 function paint(){
-  const todayISO=isoLA(deviceNow());
+  const now=deviceNow();
+  const todayISO=isoLA(now);
   const model=safeFallback();
 
   if(DEMO){
@@ -632,11 +973,23 @@ function paint(){
     model.reassure=model.reassure+'   ·   Updated '+
       fmtTime.format(new Date(lastOkAt+clockSkewMs));
   }
-  render(model,todayISO);
+
+  const m=selectMode(now,todayISO);
+  shownMode=modeKey(m);            /* tick() repaints when this changes */
+  applyMode(m);
+  if(m.layout==='single'){
+    /* Focus keeps the normal reassurance line and the full ceiling; night
+       deliberately has neither. */
+    const focus=(m.mode==='focus');
+    renderSingle(m.message, focus?model.reassure:'', focus?MSG_MAX:MSG_MAX_NIGHT);
+  }else{
+    renderFull(model,todayISO);
+  }
 }
 
-/* 8. CLOCK + date line */
+/* 9. CLOCK + date line + mode changes */
 let shownDate=null;
+let shownMode=null;
 function tick(){
   const now=deviceNow();
   document.getElementById('clock').textContent=fmtTime.format(now);
@@ -649,7 +1002,15 @@ function tick(){
     fitHeader();
     paint();                                /* re-evaluate past/upcoming */
     if(!firstPaint) loadData();             /* new day: get its row now   */
+    return;
   }
+  /* Both mode switches are driven by the clock and by nothing else, so they
+     have to be checked on the clock rather than waiting for the next fetch or
+     the 60-second staleness repaint. Checked every second, repainted only when
+     the answer actually changes — a focus message must vanish AT its
+     until-time, not up to a minute afterwards, and with no network at all. */
+  const k=modeKey(selectMode(now,isoLA(now)));
+  if(k!==shownMode) paint();
 }
 
 /* 10. SCREEN WAKE LOCK — an EXPERIMENT, not a fix.
@@ -711,9 +1072,19 @@ function debugPaint(){
   }
   const age=(wakeState==='ACTIVE'&&wakeSince)?' '+shortAgo(wakeSince):'';
   const why=wakeDetail?' ('+wakeDetail+')':'';
+  /* The mode is the first thing to check when a screen "looks wrong" from
+     5,000 miles away — dark when it should be light means night mode, not a
+     dying panel. Shown with the until-time so a takeover's own deadline is
+     legible through a camera. */
+  const mode=String(shownMode||'').split('|')[0];
+  /* No skew added: focusUntilMs is already an absolute instant from the
+     server, unlike lastOkAt which is a local Date.now() stamp. */
+  const until=(mode==='focus'&&focusUntilMs)?
+              ' till '+fmtTime.format(new Date(focusUntilMs)):'';
   dbgEl.textContent=
     'WAKE '+wakeState+age+why+'   releases '+wakeReleases+'\n'+
     SCREEN+'   data '+shortAgo(lastOkAt)+'   beat '+hbState+
+    '   mode '+mode+until+
     '   '+window.innerWidth+'\u00d7'+window.innerHeight;
 }
 
@@ -746,8 +1117,53 @@ function fitHeader(){
           Math.round(72*vScale), Math.round(38*vScale));
 }
 
-/* 13. BOOT */
+/* 13. TEST HOOKS — see the flag block at the top. ?demo=1 only.
+   The live board never converts an LA wall-clock time into an instant; the
+   server does that, once, for focusUntil. This direction exists only so the
+   night boundary and a focus expiry can be driven from a URL. Two passes,
+   because the offset is itself a function of the instant: the first guess
+   picks an offset, the second confirms it across a DST edge. */
+function laLocalToEpoch(ymd,minutes){
+  const base=Date.parse(ymd+'T00:00:00Z');
+  if(!isFinite(base)) return null;
+  const guess=base+minutes*60000;
+  function offAt(t){
+    const p=laParts(new Date(t));
+    return Date.UTC(+p.year,+p.month-1,+p.day,+p.hour%24,+p.minute,+p.second)-t;
+  }
+  let t=guess-offAt(guess);
+  const o2=offAt(t);
+  if(guess-o2!==t) t=guess-o2;
+  return t;
+}
+function applyTestHooks(){
+  if(!DEMO) return;
+  const t=paramOf('now').trim();
+  if(t){
+    const m=/^(\d{4}-\d{2}-\d{2})[T ](\d{1,2}):(\d{2})/.exec(t);
+    const ms=m?laLocalToEpoch(m[1],(+m[2])*60+(+m[3])):null;
+    /* Set as a SKEW, not a frozen time, so the clock goes on ticking from
+       there and a boundary crossing can be watched happening. */
+    if(ms!==null) clockSkewMs=ms-Date.now();
+  }
+  const nm=paramOf('nightmsg'); if(nm) settings.night=nm;
+  const f=paramOf('focus');
+  if(f){
+    const today=isoLA(deviceNow());
+    const raw=paramOf('focusuntil').trim();
+    let until;
+    if(/^\d{10,}$/.test(raw)) until=+raw;                 /* raw epoch ms    */
+    else{
+      const min=parseClockMin(raw);
+      until=laLocalToEpoch(today,min===null?24*60:min);   /* blank -> day end */
+    }
+    setFocus(f,until,today);                              /* same path as a fetch */
+  }
+}
+
+/* 14. BOOT */
 restore();
+applyTestHooks();             /* after restore(), so a hook always wins    */
 fit();
 tick();                       /* paints from restored/empty state at once */
 loadData();
@@ -771,7 +1187,15 @@ function reloadUrl(){
   const q=['v='+Date.now()];
   if(SCREEN&&SCREEN!=='unnamed') q.push('screen='+encodeURIComponent(SCREEN));
   if(DEBUG) q.push('debug=1');
-  if(DEMO)  q.push('demo=1');
+  if(DEMO){
+    q.push('demo=1');
+    /* Carry the test hooks too, for the same reason: a demo window left open
+       overnight must not quietly become a different test an hour later. */
+    ['night','nightmsg','focus','focusuntil','now'].forEach(function(k){
+      const v=paramOf(k);
+      if(v) q.push(k+'='+encodeURIComponent(v));
+    });
+  }
   return location.pathname+'?'+q.join('&');
 }
 setTimeout(function(){ location.replace(reloadUrl()); },RELOAD_MS);
