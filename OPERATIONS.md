@@ -22,7 +22,8 @@ bedroom needs something more specific than "off".
 | **Morning** | already on | display turns on / already on |
 | **Daytime** | board continuously available, self-recovering | same |
 | **Evening** | board stays up | board until 9pm |
-| **Overnight** | **board stays up — running 24/7 works** | **night variant**, once switched on: near-black screen, dim amber, date + time + one short line. **Currently the day board, like the others** |
+| **Evening (from 9pm)** | **board stays up, dimmed** — night palette, whole board, same content | dimmed and reduced to one line |
+| **Overnight** | as above — running 24/7 works | as above |
 | **Next morning** | continuous | back to the full board at 6am |
 
 **Why the change.** Running the two living-area displays around the clock was
@@ -31,28 +32,37 @@ whole class of "did the morning power-on work?" failures, which is a real
 reliability gain given that recovery has to happen from 5,000 miles away. A
 screen that never goes off cannot fail to come back.
 
-**The bedroom is different, and it is still an open question.** It is the one
-place a lit screen is a problem, so instead of staying on the day board it can
-switch at 9pm to a night variant (see *Display modes* in `HANDOFF.md`):
-near-black ground, warm low-luminance amber, no white and no blue — both are
-more alerting and worse for sleep — showing the date, the time and one calm
-line. The reasoning is that waking at 3am disoriented is exactly when knowing
-"it is the middle of the night, you are home, it is not morning yet" is worth
-most, and a dark screen you can read is more use than a dead one.
+**All three screens now dim at 9pm — this supersedes the earlier
+bedroom-only-night note.** What differs between them is not *whether* they dim
+but *what they show once dimmed*, and that is because they have two different
+problems:
 
-**That is a hypothesis, not a result — so it is not switched on.** The night
-variant is built, tested and deployed, and `SCREEN_MODES.bedroom.night` is
-`false`. Every display currently shows the day board around the clock. It gets
-turned on when somebody is in the house for the first night of it, which is the
-same trip that answers whether she tolerates it at all. Shipping it dark-by-
-default would mean the first person to find out is her, alone, at 3am.
+- **Living areas — evening brightness.** These screens are still being *read*
+  in the evening; she still wants the calendar and the routine. They keep the
+  **whole board**, just dimmed. Dropping them to one line would have solved the
+  wrong problem by removing the thing she is looking at.
+- **Bedroom — sleep.** Nobody reads a board at 3am, so it drops to one calm
+  line: near-black ground, warm low-luminance amber, no white and no blue, both
+  of which are more alerting and worse for sleep. Waking at 3am disoriented is
+  exactly when "it is the middle of the night, you are home, it is not morning
+  yet" is worth most, and a dark screen you can read beats a dead one.
 
-If she cannot sleep with a dim glow in the room, the answer is to switch that
-display off overnight at the device layer — the original target for the
-bedroom, unchanged and still valid. Do not respond by dimming the palette
-further and trying again; if a glow is the problem, less glow is still the
-problem. If it is merely too bright, that is a different finding and there are
-two dials for it (`MSG_MAX_NIGHT`, then the night colour tokens).
+**Two things about the bedroom half.** It is configured but **the bedroom stick
+is not installed**, so that branch has never run on hardware. When it goes in,
+the first night is a supervised event — whether she tolerates a dim glow in the
+room at all is unanswered, and the person who finds out should not be her,
+alone, at 3am. If she cannot sleep with it, the answer is to switch that display
+off overnight at the device layer — the original target for the bedroom,
+unchanged and still valid. Do not respond by dimming the palette further and
+trying again; if a glow is the problem, less glow is still the problem.
+
+**And one about the living-area half, which is live now.** The night palette was
+designed for a glanced-at bedroom screen, and the table is the opposite — she
+*actively reads* it at ~32 inches with aging eyes. Whether amber-on-near-black
+is readable enough there is a judgement that needs the room; contrast has been
+measured and the numbers are in `HANDOFF.md`. **Look at the table at 9pm before
+anything else**, and treat "less off-putting in the evening" as not worth having
+if it costs her the calendar. Both the palette and the 9pm start are provisional.
 
 The governing constraint is unchanged: **she cannot troubleshoot.** No opening
 Silk, no bookmarks, no typing URLs, no switching HDMI inputs, no clearing a "No
@@ -73,7 +83,7 @@ bedroom question, and only if the night variant fails its test.
 |---|---|---|
 | **Table (primary)** | Insignia 24" F20, **Fire TV built in**, 720p | Board already runs here. Screensaver can be set to Never; sleep timer maxes at 240 min. Behaves differently from the external Sticks. |
 | **Living room** | LG TV + Fire TV Stick | Main test rig for external sticks. CEC = "SIMPLINK". |
-| **Bedroom** | Hisense TV + Fire TV Stick | **Must not be lit like a day board overnight.** A night variant is built for it (9pm–6am: dark screen, dim amber, one line) but is **not switched on** — that happens with somebody in the house. Whether it is tolerable in the room is untested; if not, this display goes off overnight instead. |
+| **Bedroom** | Hisense TV + Fire TV Stick | **Stick not installed yet.** **Must not be lit like a day board overnight.** Configured for the minimal night variant (9pm–6am: dark screen, dim amber, one line), never run on hardware. First night is supervised; if a glow is not tolerable, this display goes off overnight instead. |
 
 ### Two incompatible Stick architectures
 
@@ -150,10 +160,11 @@ for one; the fix is at the device layer.
 
 - **The night variant, and the focus takeover.** Both are page-level, both are
   described in `HANDOFF.md`; the operational points are:
-  - night is **deployed but switched off** on every screen — one boolean —
-    until somebody is there for the first night; the focus takeover is live now;
-  - once on, the bedroom goes dark 9pm–6am on the server's clock, so a drifting
-    Fire TV clock cannot switch it at the wrong hour;
+  - **every screen dims 9pm–6am** on the server's clock, so a drifting Fire TV
+    clock cannot switch one at the wrong hour. The living areas keep the whole
+    board and only change colour; the bedroom drops to one line;
+  - so a dark screen in the evening is now **expected**, not a fault — check
+    the mode before diagnosing a display as dead;
   - a **focus message** ("Greg stepped out, back around 4:00") can be raised
     from a phone by typing two cells in the Sheet, appears on every display
     within ~3 minutes, and **takes itself down at its own deadline even with no
@@ -281,13 +292,17 @@ assume forum answers apply to these OS versions.
 8. What does ADB add on the 2024 Fire OS Stick?
 9. Would a WebView wrapper materially improve reliability?
 
-10. **Does she tolerate a dim glow in the bedroom overnight?** The one question
-    the night variant exists to answer, and the only one on this list that
-    cannot be answered by testing hardware — it needs a night in the room, with
-    somebody there. This is why the variant ships switched off; enabling it is
-    one boolean and the first thing to do on that trip. A clean "no" is a good
-    result: it reinstates off-overnight for that display and nothing else
-    changes.
+10. **Is the night palette readable on the TABLE?** Live now, and the first
+    thing to look at after 9pm. She actively reads that screen; the palette was
+    designed for a glanced-at bedroom one. Contrast is measured in `HANDOFF.md`
+    — the calendar's date column is the weak row. Not answerable headless.
+11. **Do the living areas want an earlier start than 9pm?** 9pm is a
+    sleep-shaped answer to an evening-brightness problem. A Sheet edit
+    (`nightStart`) until the two need different windows.
+12. **Does she tolerate a dim glow in the bedroom overnight?** Still unanswered
+    and now blocked on the stick being installed. Needs a night in the room with
+    somebody there. A clean "no" is a good result: it reinstates off-overnight
+    for that display and nothing else changes.
 
 **Not the goal, restated.** The earlier version of this said "awake 12–16 hours,
 deliberately off overnight". That now applies to the **bedroom only**, and only

@@ -25,11 +25,10 @@ layer: see `OPERATIONS.md`.
 - Insignia 24" Fire TV, **720p**, viewed from ~32 inches at a table.
 - Amazon Silk browser, which **keeps a top navigation bar** — the usable
   viewport is roughly 1280×650, not 1280×720. Confirmed on the device.
-- Two more Fire TV Sticks exist (bedroom, living room). All three run the same
-  page and, as shipped, all three show the day board around the clock. The
-  bedroom is the one intended to differ — it is the screen a night variant is
-  built for, and the only screen whose flag is meant to be flipped on (see
-  *Display modes* below).
+- A living-room Fire TV Stick also runs the same page. **The bedroom stick is
+  not installed yet**, so the bedroom's night behaviour is configured but has
+  never run on hardware. All three screens dim at night; only the bedroom drops
+  to the minimal layout (see *Display modes* below).
 
 ## Architecture
 
@@ -115,41 +114,74 @@ The calendar is **height**-bound, not width-bound. Narrowing the date column
 buys nothing — measured across four ratios, the resolved type size did not move.
 If it needs to be larger, the lever is fewer entries, not more width.
 
-## Display modes — two axes, three combinations
+## Display modes — two axes, chosen independently
 
-The board has three display states. They are **not** three special cases; they
-are two independent axes, and the modes fall out of the combinations. Anything
-added later should extend an axis rather than add a fourth branch.
+The board has four display states. They are **not** four special cases; they
+are two independent axes, and the states fall out of the combinations. Anything
+added later should extend an axis rather than add a fifth branch.
 
 | Axis | Values |
 |---|---|
 | **Palette** | `day` — the warm paper/ink board · `night` — near-black ground, warm low-luminance amber text |
 | **Layout** | `full` — header + grid + reassurance · `single-message` — header + one dominant centred message + reassurance |
 
-| Mode | Palette | Layout | Middle is… |
-|------|---------|--------|------------|
-| **Day board** | day | full | — (the original board, unchanged) |
-| **Night** | night | single-message | the night orientation text |
-| **Focus** | day *or* night | single-message | an ad-hoc takeover message |
+**The two axes are selected independently**, and that is the point of the
+design rather than an implementation detail. Palette is decided first — is this
+screen night-enabled, and are we inside night hours — and applies whatever
+happens next. Layout is then decided on its own, per screen. Nothing derives
+one from the other.
 
-**Currently live: day board and focus.** Night is built and tested but switched
-off on every screen pending an in-room test — see *Night* below for the one
-boolean that turns it on.
+| State | Palette | Layout | Which screens | Middle is… |
+|---|---|---|---|---|
+| **Day board** | day | full | all, 6am–9pm | — (the original board, unchanged) |
+| **Night, full board** | night | full | table, living room, unknown | — same board, dimmed |
+| **Night, minimal** | night | single-message | bedroom | the night orientation text |
+| **Focus** | day *or* night | single-message | all | an ad-hoc takeover message |
+
+**The dark full board is not a fourth mode somebody added.** It is what falls
+out of asking the two questions separately instead of together, and it was
+always a legal state — the palette is nothing but token overrides and every
+layout rule is palette-agnostic. It simply was not *reachable*, because the
+only route to the night palette ran through the single-message layout.
+
+It exists because the living areas and the bedroom have different problems.
+The bedroom's problem is **sleep**: dark while she is in bed, and minimal
+because nobody reads a board at 3am. The living areas' problem is **evening
+brightness**: those screens are still being *read* in the evening — she still
+wants the calendar and the routine — they are just too bright. Dropping them to
+one line would solve the wrong problem by removing the thing she is looking at.
 
 **Selection order, re-evaluated on every paint** (`selectMode()`), never latched:
 
-1. A focus message is active → single-message with the focus text. Palette is
-   night if this screen is night-enabled **and** we are inside night hours,
-   otherwise day. So one takeover shows warm at 2pm and dark at 3am.
-2. Else this screen is night-enabled **and** inside night hours → single-message
-   with the night text, night palette.
+0. **Palette first, on its own.** `night = this screen is night-enabled AND
+   deviceNow() is inside its night window`. That answer stands regardless of
+   which layout is chosen below.
+1. A focus message is active → single-message with the focus text, in that
+   palette. So one takeover shows warm at 2pm and dark at 3am, on any screen.
+2. Else if `night` → **this screen's configured night layout**: `single` (the
+   bedroom) with the night text, or `full` (the living areas) with the ordinary
+   board and no message at all.
 3. Else → the full day board, day palette.
 
-Both extra modes are clock-driven and nothing else, so `tick()` recomputes the
+Both switches are clock-driven and nothing else, so `tick()` recomputes the
 selection every second and repaints **only when the answer changes** — a
 takeover has to disappear *at* its until-time, not up to a minute later, and
-with no network. The current state is on `<html>` as `data-mode` /
-`data-palette`, which is also what `?debug=1` and the headless harness read.
+with no network. The current state is on `<html>` as `data-mode`,
+`data-layout` and `data-palette`, which is what `?debug=1` and the headless
+harness read. `data-layout` is styled by nothing today; it exists so the
+expected palette split (below) costs one CSS block and no JS.
+
+### Per-screen config
+
+`SCREEN_MODES` in `index.html`, with a living-area-shaped default for anything
+unlisted — including `unnamed`, so opening the bare URL from another country
+shows what the table shows, since the palette keys off LA time.
+
+| `?screen=` | `night` | `nightLayout` |
+|---|---|---|
+| `table`, `living-room` | true | `full` |
+| `bedroom` | true | `single` |
+| *anything else* | true | `full` |
 
 ### The single-message component
 
@@ -235,27 +267,57 @@ future option (it would want its own tab), not now.
 
 ### Night
 
-- **Night-enabled is per-screen**, a small `SCREEN_MODES` map in the JS keyed by
-  `?screen=`. A screen not in the map (including `unnamed`) stays on the day
-  board. The table and living-room displays run the day board 24/7 successfully
-  — confirmed behaviour, and changing it would be a regression.
+**All three screens now dim at night.** The living areas keep the whole board;
+the bedroom drops to one line. Note the bedroom is enabled in config but **no
+bedroom display exists yet — the stick is not installed**, so that branch is
+untested on hardware and its first real night is still a supervised event.
 
-- **⚠ AS SHIPPED, NIGHT IS OFF ON EVERY SCREEN — BEDROOM INCLUDED.** The whole
-  night path is built, measured and live; `SCREEN_MODES.bedroom.night` is
-  `false` and is the only thing gating it. It ships off deliberately: whether a
-  dim glow in her room at 3am is tolerable can only be found out in that room,
-  and a feature that changes what a bedroom looks like overnight should not go
-  live ahead of somebody being present to see the first night of it.
+- **⚠ THE NIGHT WINDOW IS PROVISIONAL AND EXPECTED TO SPLIT.** 9:00 pm – 6:00 am
+  LA, overridable via `nightStart` / `nightEnd` in `Settings`, and every screen
+  shares it. That window was chosen for **sleep** — dark while she is in bed —
+  which is the bedroom's problem. The living areas have a different one,
+  *evening brightness*, which starts nearer dusk, so those screens probably want
+  an **earlier start**. One window is deliberately all that is built; the lookup
+  goes through `nightWindowFor(cfg)` purely so a second one is a config change
+  rather than a rewrite. Do not hardcode `NIGHT_START_MIN` anywhere new.
+- Compared against `deviceNow()`, so a drifting Fire TV clock cannot flip a
+  screen an hour early. Identical start and end reads as an *empty* window, not
+  a 24-hour one — a typo must not be able to hold a display dark all day when
+  nobody in the house can see the URL that would explain why.
 
-  **To enable:** flip that one boolean to `true` and push. The display picks it
-  up at its next hourly reload. Nothing else changes — verified by flipping the
-  flag at runtime in the harness and watching the 21:00 / 06:00 boundaries
-  behave, with the other screens unaffected.
-- **Window: 9:00 pm – 6:00 am LA**, overridable via `nightStart` / `nightEnd` in
-  `Settings`. Compared against `deviceNow()`, so a drifting Fire TV clock cannot
-  flip the bedroom into night an hour early. Identical start and end reads as an
-  *empty* window, not a 24-hour one — a typo must not be able to hold a display
-  dark all day when nobody in the house can see the URL that would explain why.
+- **⚠ THE PALETTE VALUES ARE PROVISIONAL, AND THIS IS THE RISKIEST OF THE THREE.**
+  Ten tokens in one CSS block; nothing else hardcodes a night colour. They were
+  chosen against a monitor, which is not the test.
+
+  The tension to weigh in the room: this palette was designed for the
+  **bedroom**, a glance-if-you-look screen where legibility is traded away for
+  darkness on purpose. **The table is the opposite** — she *actively reads* it at
+  ~32 inches with aging eyes and it is her primary anchor. "Less off-putting in
+  the evening" must not quietly cost her readability on the screen that matters
+  most.
+
+  Measured computed contrast, day vs night, same roles (headless, so this part
+  *is* objective even though the perceptual question is not):
+
+  | Text role | Day | Night |
+  |---|---|---|
+  | header date · routine items | 15–16:1 | ~6.1–6.3:1 |
+  | calendar entry · past entry | 6.05:1 | 3.91:1 |
+  | clock · reassurance line | 6.29:1 | 4.30:1 |
+  | **captions · calendar DATE column · standing prompt** | **4.68:1** | **2.85:1** |
+
+  That last row is the one to look at first. `--muted` carries the calendar's
+  date column — "Wed, Aug 19", precisely what the calendar exists to say — and
+  it lands **below 3:1**, where its day-palette counterpart sits at 4.68:1. That
+  gap is an artifact of picking amber values for a screen where `--muted` is
+  barely used, not a decision anybody made about the full board.
+
+  **If one palette cannot serve both**, the expected split is a **deeper**
+  near-black for the bedroom's single message and a **gentler dim** for the
+  living-area full board (lighter ground, higher-contrast text). It needs no
+  JS — `<html>` already carries `data-layout`, so it is one more block keyed on
+  `[data-palette="night"][data-layout="full"]`, overriding only what differs.
+  Structured for it; deliberately not built.
 - **Message** from the `night` Settings key, with a safe default that is true at
   any hour of any night with no data behind it at all, and never says morning is
   close. `{days:}` works in it.
@@ -274,6 +336,19 @@ restyles information; it never asserts an occurrence. This is an application of
 *"undated information expires"* — the same rule that empties the day row at
 midnight and drops an expired `{days:}` line — not an exception to *"nothing is
 inferred from time."*
+
+**Now that the palette applies to the full board on every screen, this is the
+case where it looks most like a violation** — at 9pm the whole board changes
+colour, every card at once — so be exact about why it is fine. Restyling is not
+asserting. The routine says the same things in the same order, the calendar's
+checkmarks still come from comparing dates, and not one line means something
+different at 21:01 than it did at 20:59. The only thing the clock changed is
+how much light the panel emits, and that is measured: the dark full board
+resolves to *byte-identical* type sizes and row counts as the day board — only
+the colours differ.
+
+The test for any future clock-driven behaviour is unchanged: **does it change
+what the board claims, or only how that claim looks?**
 
 ## Deliberate departures from BRIEF.md
 
@@ -366,7 +441,7 @@ asking.
   row for today, 40-minute-stale data, countdown expiry.
 - Live cross-origin fetch, `currentonly` scope, `{days:}` arithmetic.
 
-**Verified for the display modes** (64 measured checks in headless Chrome over
+**Verified for the display modes** (104 measured checks in headless Chrome over
 CDP, plus 56 for the endpoint's focus resolution run under Node with stubbed
 Apps Script globals):
 - **The day board is unchanged.** Resolved `--fs` for every box, the header, the
@@ -376,17 +451,27 @@ Apps Script globals):
   focus in the day palette, focus in the night palette, a one-line message, a
   two-sentence message, and a deliberately abusive ~950-character message
   (which lands at 27–32px rather than clipping).
-- Mode selection, **as shipped**: bedroom, table, living-room and `unnamed` all
-  stay on the day board at 21:00, 23:30 and 03:00 — nothing goes dark on its own.
-- Mode selection **with `SCREEN_MODES.bedroom.night` flipped to `true` at
-  runtime**: the bedroom flips at 20:59→21:00 and 05:59→06:00 and the table is
-  unaffected — so the flag really is the only gate, and enabling it is a
-  one-line change with no other edits.
-- Focus at 3am in the bedroom is single-message in the **night** palette while
-  focus at 2pm is single-message in the **day** palette.
+- **The palette axis**, on all four screen names (`table`, `living-room`,
+  `bedroom`, `unnamed`): night at 21:00 / 23:30 / 03:00 / 05:59, day at
+  20:59 / 06:00 / 14:00.
+- **The layout axis, chosen independently**: at the *same instant* the table,
+  living room and unknown screens are night + **full**, with all four boxes and
+  the reassurance line still present, while the bedroom is night + **single**.
+  Same palette, same background colour, different layouts — which is the
+  independence, demonstrated rather than asserted.
+- **The dark full board is presentation only**: at 1280×650 it resolves to
+  identical `--fs` for every box and identical row counts to the day board;
+  only the background and ink colours differ.
+- Focus at 3am is single-message in the **night** palette while focus at 2pm is
+  single-message in the **day** palette.
 - Focus expiry crossing its until-time on the ticking clock alone, with no
-  reload and no fetch; and the night window crossed in both directions the same
-  way.
+  reload and no fetch.
+- **The night boundary crossed in both directions on the ticking clock, for
+  both layouts.** The table goes day-full → night-full at 21:00 and back at
+  06:00; the bedroom goes day-full → night-single and back. On the table
+  crossing, the resolved type sizes, row counts, captions and reassurance line
+  are all unchanged across the boundary and only the background moves — the
+  living-area promise, checked rather than assumed.
 - **Offline self-clear from cache**, with the endpoint blocked at the network
   layer: a cached takeover shows, then retires itself at its until-time and the
   day board returns.
@@ -438,18 +523,26 @@ Apps Script globals):
 **Not verified on hardware:**
 - Silk's exact viewport dimensions — inferred from the letterboxing symptom,
   never measured on the device.
-- **Whether she tolerates a dim amber glow in the bedroom overnight.** This is
-  the open question night mode exists to answer, it can only be answered in the
-  room, and **it is why night ships switched off** — flip
-  `SCREEN_MODES.bedroom.night` when somebody is there for the first night. If
-  she cannot, the answer is to switch that display off overnight at the device
-  layer rather than to soften the palette further — see `OPERATIONS.md`.
-
-  If it is merely too bright, there are two independent dials and they are
-  worth trying in this order: **`MSG_MAX_NIGHT`** (currently 72, deliberately
-  provisional — less lit area) and then the **six night tokens** at the top of
-  the CSS (dimmer amber). Both are one-line changes. Nothing else in the night
-  path depends on either value.
+- **Whether the night palette is READABLE on the full board.** The one that
+  matters most, because it lands on the table — the screen she actively reads.
+  Headless can prove it does not clip and can measure contrast ratios (see
+  *Night* above, and the `--muted` row in particular); it cannot tell you
+  whether an 86-year-old can read amber-on-near-black across a room. Look at the
+  table at 9pm before anything else. Dials, in order: the **ten night tokens**
+  (contrast/darkness — `--muted` first), then the `[data-layout="full"]` split
+  if one palette will not serve both screens.
+- **Whether the living areas want an earlier window.** 9pm is a sleep-shaped
+  answer to an evening-brightness problem. If the table is still glaring at
+  8pm, that is `nightStart`, and it is a Sheet edit, not a code change — until
+  the bedroom needs a different one from the living areas, which is the split
+  flagged above.
+- **Whether she tolerates a dim amber glow in the bedroom overnight.** Untested
+  and untestable for now — the stick is not installed. When it is, the first
+  night is a supervised event. If she cannot sleep with it, the answer is to
+  switch that display off overnight at the device layer rather than to soften
+  the palette further — see `OPERATIONS.md`. If it is merely too bright, dial
+  **`MSG_MAX_NIGHT`** (currently 72, provisional — less lit area) before
+  touching colour.
 - Whether 25px routine type is readable from her chair.
 - Whether Silk survives days of uptime. There is an hourly `location.replace()`
   reload as a watchdog, untested over a long run.

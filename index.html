@@ -37,9 +37,34 @@
 
      Near-black ground with warm low-luminance amber text. Deliberately no
      white and no blue anywhere: both are more alerting and worse for sleep,
-     which is the entire reason a bedroom display gets a night variant rather
-     than just staying on the day board. If she finds it too bright in the
-     room, dim it HERE — every night rule reads these six values.
+     which is the entire reason a screen dims at night rather than staying on
+     the day board.
+
+     THESE TEN VALUES ARE THE WHOLE PALETTE AND THEY ARE PROVISIONAL.
+     Everything below reads them and nothing else hardcodes a night colour, so
+     this block is the one place to adjust darkness and contrast. They have
+     never been seen on a television in a dark room; they were chosen against
+     a monitor, which is not the test.
+
+     The tuning tension, stated so nobody has to rediscover it: this palette
+     was designed for the BEDROOM, a glance-if-you-look screen where legibility
+     is traded away for darkness on purpose. The table is the opposite — she
+     ACTIVELY READS it at about 32 inches with aging eyes, and it is her
+     primary anchor. Amber on near-black at reading sizes across a full board
+     may well be harder for her than the crisp day palette, and "less
+     off-putting in the evening" must not quietly cost her readability on the
+     one screen that matters most.
+
+     One palette is deliberately all that is built. If it turns out one cannot
+     serve both, the expected split is a DEEPER near-black for the bedroom's
+     single message and a GENTLER dim for the living-area full board (lighter
+     ground, higher-contrast text). That needs no JS: <html> already carries
+     data-layout, so it is one more block —
+
+       :root[data-palette="night"][data-layout="full"]{ ... }
+
+     — overriding only the tokens that differ. Do not build it before somebody
+     has looked at the real screens at night.
 
      Set on <html>, not on .stage, so the letterboxed margin around the stage
      matches instead of framing the board in a lighter rectangle. */
@@ -313,32 +338,52 @@ const DEFAULT_NIGHT =
   "It's the middle of the night.|You're home and safe.|It's not morning yet.";
 
 /* Night window, LA wall clock. Overridable per household via the Settings tab
-   (nightStart / nightEnd); these are the fallbacks. */
+   (nightStart / nightEnd); these are the fallbacks. Every screen shares this
+   one window.
+
+   PROVISIONAL, AND THE EXPECTED NEXT TUNE IS TO SPLIT IT.
+   9pm–6am was chosen for SLEEP — dark while she is in bed — which is the
+   bedroom's problem. The living areas have a different problem: evening
+   brightness, which starts nearer dusk, so those screens probably want an
+   EARLIER start. One window is deliberately all that is built today; the
+   window is looked up per screen (nightWindowFor) purely so that adding a
+   second one is a config change rather than a rewrite. Do not hardcode
+   NIGHT_START_MIN anywhere new. */
 const NIGHT_START_MIN = 21*60;   /* 9:00 pm */
 const NIGHT_END_MIN   =  6*60;   /* 6:00 am */
 
-/* Which displays get a night variant, keyed by ?screen=. A screen not listed
-   here (including "unnamed") stays on the day board.
+/* Per-screen config, keyed by ?screen=. THE TWO AXES ARE CHOSEN SEPARATELY:
 
-   The table and living-room displays have run the day board around the clock
-   successfully — that is confirmed behaviour and changing it would be a
-   regression, not an improvement.
+     night        does this screen dim at night at all?   (the PALETTE axis)
+     nightLayout  what does it show once dimmed?          (the LAYOUT axis)
 
-   BEDROOM IS OFF ON PURPOSE, AND THIS IS THE ONE LINE TO FLIP.
-   Night mode is built, measured and ready; it is not switched on because
-   whether a dim glow in her room at 3am is tolerable can only be found out in
-   that room, and the person who has to watch it happen is not there yet. A
-   feature that changes what a bedroom looks like overnight should not go live
-   ahead of somebody being present to see the first night of it.
+   Splitting them is the whole point of this config. Dark and minimal used to
+   arrive together, which is right for a bedroom and wrong for a living area:
+   the table and living-room screens are still being READ in the evening — she
+   still wants the calendar and the routine — they are just too bright. What
+   those screens want is the night palette on the FULL board. Same content,
+   dimmed. That combination was always legal (the palette is nothing but token
+   overrides and every layout rule is palette-agnostic); it simply was not
+   reachable, because the only route to the night palette ran through the
+   single-message layout.
 
-   To enable: set bedroom's night to true, push, and expect it on that display
-   at the next hourly reload. Nothing else changes — every other night code
-   path is already live and already tested, and this flag is the only gate. */
+     table, living-room   dim, keep the whole board      <- the evening problem
+     bedroom              dim, drop to one calm line     <- the sleep problem
+     anything else        dim, keep the whole board
+
+   The unknown/"unnamed" default deliberately matches the living areas, so
+   opening the bare URL from another country shows what the table shows —
+   the palette keys off LA time via deviceNow(), not off the viewer's clock.
+
+   Note the bedroom is enabled here but no bedroom display exists yet; the
+   stick is not installed. Its first real night is still a supervised event —
+   see HANDOFF.md. */
 const SCREEN_MODES = {
-  'bedroom':     { night:false },   /* <- flip to true after the in-room test */
-  'table':       { night:false },
-  'living-room': { night:false }
+  'bedroom':     { night:true, nightLayout:'single' },
+  'table':       { night:true, nightLayout:'full'   },
+  'living-room': { night:true, nightLayout:'full'   }
 };
+const DEFAULT_SCREEN_MODE = { night:true, nightLayout:'full' };
 
 /* Ceiling and floor for the single-message type. The floor is the same 15px
    the cards use, and it is a floor for the same reason: nothing may ever clip,
@@ -862,27 +907,49 @@ function loadData(){
    board to its safe baseline. Time passing here only ever removes or restyles
    information; it never asserts that an event occurred. This is the same
    "undated information expires" rule that empties the day row at midnight and
-   drops an expired {days:} line — applied to a message. */
+   drops an expired {days:} line — applied to a message.
 
-function screenAllowsNight(){
-  const c=SCREEN_MODES[SCREEN];
-  return !!(c&&c.night);        /* unlisted screens, incl. "unnamed", stay day */
+   That still holds now the palette applies to the FULL board on every screen,
+   and this is the case where it looks most like a violation: at 9pm the whole
+   board changes colour, every card at once. It is worth being exact about why
+   it is fine. Restyling is not asserting. The routine says the same things in
+   the same order, the calendar's checkmarks still come from comparing dates,
+   and not one line means something different at 21:01 than it did at 20:59 —
+   the only thing the clock changed is how much light the panel emits. The
+   test to apply to any future clock-driven behaviour is unchanged: does it
+   change WHAT the board claims, or only how that claim looks? */
+
+/** This screen's config, with a living-area-shaped default for anything not
+ *  listed (including "unnamed"). Never returns undefined — a screen name
+ *  nobody anticipated must still land on a defined behaviour. */
+function screenMode(){
+  return SCREEN_MODES[SCREEN]||DEFAULT_SCREEN_MODE;
 }
-function inNightWindow(now){
-  const s=clockMinOr(settings.nightstart,NIGHT_START_MIN);
-  const e=clockMinOr(settings.nightend,  NIGHT_END_MIN);
+function screenAllowsNight(){ return !!screenMode().night; }
+
+/** The window this screen dims on. Every screen gets the same one today; this
+ *  exists so the earlier living-area window (see NIGHT_START_MIN) becomes a
+ *  lookup here rather than a change to every caller. */
+function nightWindowFor(cfg){
+  return { start:clockMinOr(settings.nightstart,NIGHT_START_MIN),
+           end:  clockMinOr(settings.nightend,  NIGHT_END_MIN) };
+}
+function inNightWindow(now,win){
   /* Identical start and end reads as an empty window, not a 24-hour one. A
      typo in the Sheet must not be able to hold a display in night mode all
      day, when nobody in the house can see the URL that would prove why. */
-  if(s===e) return false;
+  if(win.start===win.end) return false;
   const m=laMinutes(now);
-  return s>e ? (m>=s||m<e)      /* the normal case: the window crosses midnight */
-             : (m>=s&&m<e);
+  return win.start>win.end ? (m>=win.start||m<win.end)   /* crosses midnight */
+                           : (m>=win.start&&m<win.end);
 }
+/** The PALETTE axis, on its own. Nothing here knows or cares what layout the
+ *  screen will use — that is decided separately in selectMode(). */
 function isNight(now){
   if(TEST_NIGHT==='1') return true;
   if(TEST_NIGHT==='0') return false;
-  return screenAllowsNight()&&inNightWindow(now);
+  const cfg=screenMode();
+  return !!cfg.night&&inNightWindow(now,nightWindowFor(cfg));
 }
 
 /* The focus safety model, in one function.
@@ -912,25 +979,47 @@ function nightMessage(todayISO){
   return expandDays(raw,todayISO).text||DEFAULT_NIGHT;
 }
 
-/* Selection order, top to bottom. One place, so the three modes cannot
-   drift apart. */
-function selectMode(now,todayISO){
-  const night=isNight(now);
-  const focus=activeFocus(todayISO,now);
-  if(focus) return { mode:'focus', layout:'single', night:night,  message:focus };
-  if(night) return { mode:'night', layout:'single', night:true,
-                     message:nightMessage(todayISO) };
-  return      { mode:'day',   layout:'full',   night:false, message:'' };
-}
-function modeKey(m){ return m.mode+'|'+(m.night?'n':'d')+'|'+m.message; }
+/* Selection order, top to bottom. One place, so the modes cannot drift apart.
 
-/* Both axes land on <html> as data attributes. The palette one is what the CSS
-   reads; the mode one is not styled at all — it is there so the current state
-   is legible from outside (devtools, the ?debug=1 readout, the headless
-   verification harness) instead of being locked inside a closure variable. */
+   The two axes are chosen INDEPENDENTLY. Palette is settled first and applies
+   whatever happens next; layout is then chosen on its own. That is why a dark
+   full board exists at all: it is not a mode anybody added, it is what falls
+   out of asking the two questions separately instead of together. */
+function selectMode(now,todayISO){
+  const night=isNight(now);                     /* axis 1: palette */
+  const focus=activeFocus(todayISO,now);
+
+  /* A takeover is a takeover on every screen, in whatever palette that screen
+     currently warrants — dark at 3am, warm at 2pm. Unchanged by this split. */
+  if(focus) return { mode:'focus', layout:'single', night:night, message:focus };
+
+  if(night){                                    /* axis 2: layout, per screen */
+    if(screenMode().nightLayout==='single')
+      return { mode:'night', layout:'single', night:true,
+               message:nightMessage(todayISO) };
+    /* The living-area case: same board, same content, dimmed. No message —
+       there is nothing to say that the board is not already saying. */
+    return   { mode:'night', layout:'full',   night:true, message:'' };
+  }
+  return     { mode:'day',   layout:'full',   night:false, message:'' };
+}
+function modeKey(m){
+  return m.mode+'|'+m.layout+'|'+(m.night?'n':'d')+'|'+m.message;
+}
+
+/* Both axes land on <html> as data attributes, separately, because they ARE
+   separate. data-palette is what the CSS reads. data-layout is not styled
+   today, but it is what makes the expected palette split cheap: if one night
+   palette cannot serve both a glanced-at bedroom line and a read-at-32-inches
+   full board, the override is a single extra CSS block keyed on
+   [data-palette="night"][data-layout="full"] — no JS change at all.
+   data-mode is styled by nothing and exists so the current state is legible
+   from outside (devtools, ?debug=1, the headless harness) rather than being
+   locked inside a closure variable. */
 function applyMode(m){
   const root=document.documentElement;
   root.setAttribute('data-palette',m.night?'night':'day');
+  root.setAttribute('data-layout',m.layout);
   root.setAttribute('data-mode',m.mode);
 }
 
@@ -1076,10 +1165,14 @@ function debugPaint(){
      5,000 miles away — dark when it should be light means night mode, not a
      dying panel. Shown with the until-time so a takeover's own deadline is
      legible through a camera. */
-  const mode=String(shownMode||'').split('|')[0];
+  /* mode AND layout: "night full" and "night single" are different answers to
+     "why does that screen look like that", and from a camera they are the two
+     you most need to tell apart. */
+  const parts=String(shownMode||'').split('|');
+  const mode=parts[0]+(parts[1]?' '+parts[1]:'');
   /* No skew added: focusUntilMs is already an absolute instant from the
      server, unlike lastOkAt which is a local Date.now() stamp. */
-  const until=(mode==='focus'&&focusUntilMs)?
+  const until=(parts[0]==='focus'&&focusUntilMs)?
               ' till '+fmtTime.format(new Date(focusUntilMs)):'';
   dbgEl.textContent=
     'WAKE '+wakeState+age+why+'   releases '+wakeReleases+'\n'+

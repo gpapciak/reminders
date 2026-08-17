@@ -192,20 +192,18 @@ list — an unrecognised `focusUntil`, or one already in the past, says so there
 
 ## 4. The bedroom at night
 
-> **Not switched on yet.** Everything in this section is built and working, but
-> no display currently changes at night — all three show the normal board around
-> the clock. It stays that way until somebody is in the house to watch the first
-> night of it, because "is a dim glow in her room at 3am alright?" is not a
-> question anyone can answer from a screenshot. Turning it on is a one-line code
-> change (`SCREEN_MODES` in `index.html`), not a Sheet edit. **You can still fill
-> in the settings below now** — they simply sit there until the switch is
-> flipped, and you can preview the result today with the demo URL at the end of
-> this file.
+**Every screen dims between 9pm and 6am** — near-black background, dim amber
+text, no white or blue. What differs is what each one shows once dimmed:
 
-The plan is: the table and living-room displays show the normal board all day
-and all night, and **the bedroom display is the one that changes.** Between 9pm
-and 6am it goes dark — near-black background, dim amber text, no white or blue
-— and shows the date, the time, and one short message. Nothing else.
+- **Table and living room — the whole board, just darker.** Same routine, same
+  calendar, same notes, same reassurance line, nothing removed. These screens
+  are still being read in the evening; they were only ever too *bright*.
+- **The bedroom — the date, the time and one short message.** Nothing else,
+  because nobody reads a board at 3am.
+
+> The bedroom TV stick is not installed yet, so for now this only affects the
+> table and living room. The `night` message below is what the bedroom will show
+> when it goes in; you can write it whenever you like.
 
 | Key | Value |
 |-----|-------|
@@ -214,6 +212,11 @@ and 6am it goes dark — near-black background, dim amber text, no white or blue
 | nightEnd | 6:00 am |
 
 - All three are optional. Leave them out and you get exactly what is shown above.
+- **`nightStart` and `nightEnd` apply to every screen**, not just the bedroom —
+  they are when the whole house dims. If the table still feels too bright in the
+  evening, make `nightStart` earlier; that is a Sheet edit, no code involved.
+- `night` is the bedroom's message only. The other screens show their usual
+  board when they dim, so there is nothing extra to write for them.
 - A **pipe** `|` (or Alt+Enter) forces a line break, same as the standing prompt.
 - Keep it true at *any* hour of the night, and keep it kind. It has to work at
   2am and at 5am with nobody there to explain it, so it should never say morning
@@ -223,11 +226,10 @@ and 6am it goes dark — near-black background, dim amber text, no white or blue
   it in the dark palette rather than the night message. That is intentional —
   the acute thing wins, it just doesn't shout.
 
-Which screens do this is set in the code, not the Sheet (`SCREEN_MODES` in
-`index.html`). Right now **every screen is set to `false`**, which is why
-nothing changes at night yet. The bedroom is the one meant to be turned on; if
-the living room should ever go quiet at night too, that is the same one-line
-change.
+*Which* screen shows which of the two is set in the code, not the Sheet
+(`SCREEN_MODES` in `index.html`) — bedroom minimal, everything else the full
+board. The *timing* is yours in the Sheet, above. If a screen ever wants the
+other treatment, that is a one-line change.
 
 ---
 
@@ -394,13 +396,18 @@ and without waiting for 9pm. Add any of these to that URL:
 | `&now=2026-08-15T22:30` | pretend it is this time; the clock runs on from there |
 | `&screen=bedroom` | the display that has a night mode |
 
-Example — what the bedroom *would* look like at half past eleven. `&night=1`
-is what makes it appear: night is switched off on every real display for now
-(§4), so without the force you get the ordinary board.
+Two examples — the same moment, half past eleven, on the two kinds of screen:
 
 ```
-https://gpapciak.github.io/reminders/?demo=1&screen=bedroom&night=1&now=2026-08-15T23:30
+the table, dimmed but complete:
+https://gpapciak.github.io/reminders/?demo=1&screen=table&now=2026-08-15T23:30
+
+the bedroom, dimmed and minimal:
+https://gpapciak.github.io/reminders/?demo=1&screen=bedroom&now=2026-08-15T23:30
 ```
+
+`&night=1` forces the dim regardless of the hour, if you would rather not pick
+a time.
 
 These only work alongside `demo=1`, so the three bookmarked TV URLs can never
 trip one by accident.
