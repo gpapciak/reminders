@@ -25,6 +25,15 @@ layer: see `OPERATIONS.md`.
 - Insignia 24" Fire TV, **720p**, viewed from ~32 inches at a table.
 - Amazon Silk browser, which **keeps a top navigation bar** — the usable
   viewport is roughly 1280×650, not 1280×720. Confirmed on the device.
+  **That bar is blue and always present**, which is a real limit on how dark a
+  bedroom screen can get: the page can black out every pixel it owns and the
+  bar still glows. The page cannot remove browser chrome. Two levers exist and
+  only one is page-side: `<meta name="theme-color">`, which Chromium-based
+  browsers use to tint their own chrome and which `applyMode()` keeps in step
+  with the current palette (so it asks for `#000000` in the bedroom at night).
+  **Unverified on Silk** — headless proves nothing here, exactly like the wake
+  lock; if Silk ignores it the bar stays blue and nothing else changes. The
+  durable fix is the WebView shell in `OPERATIONS.md`, which has no chrome.
 - A living-room Fire TV Stick also runs the same page. **The bedroom stick is
   not installed yet**, so the bedroom's night behaviour is configured but has
   never run on hardware. All three screens dim at night; only the bedroom drops
@@ -319,12 +328,28 @@ untested on hardware and its first real night is still a supervised event.
   gap is an artifact of picking amber values for a screen where `--muted` is
   barely used, not a decision anybody made about the full board.
 
-  **If one palette cannot serve both**, the expected split is a **deeper**
-  near-black for the bedroom's single message and a **gentler dim** for the
-  living-area full board (lighter ground, higher-contrast text). It needs no
-  JS — `<html>` already carries `data-layout`, so it is one more block keyed on
-  `[data-palette="night"][data-layout="full"]`, overriding only what differs.
-  Structured for it; deliberately not built.
+- **The split is now half-built: the bedroom has its own deeper block.**
+  Requested because the bedroom needs to be darker than the living areas can
+  afford to be. Ground goes to true black and the amber drops about a stop:
+
+  | | Living areas | Bedroom |
+  |---|---|---|
+  | ground | `#080603` | `#000000` |
+  | message / header | 6.1–6.3:1 | **3.74:1** |
+  | clock | 4.30:1 | 2.51:1 |
+
+  **Keyed on the SCREEN, not the layout** — `[data-screen="bedroom"]
+  [data-palette="night"]` — and that distinction is load-bearing. The earlier
+  note here guessed the split would key on `data-layout`, which would have been
+  wrong: a focus takeover uses the single-message layout on *every* screen, so
+  a layout-keyed rule would also have dimmed a 2pm takeover in the living room,
+  where she is awake and reading it. The thing being targeted is the room, so
+  the selector names the room. Verified: a living-room takeover at night keeps
+  the readable night palette, and the deeper block does not leak.
+
+  What is still **not** built is the other half — a *gentler* dim for the
+  living-area full board, if the shared night palette turns out to be too dark
+  for reading the calendar there. Same mechanism, one more block.
 - **Message** from the `night` Settings key, with a safe default that is true at
   any hour of any night with no data behind it at all, and never says morning is
   close. `{days:}` works in it.

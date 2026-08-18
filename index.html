@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Silk keeps its own navigation bar above the page and it is BLUE, which is
+     the worst possible colour to leave glowing in a bedroom. The page cannot
+     remove that bar — it is browser chrome, and the real fix is device-layer
+     (see the WebView shell in OPERATIONS.md). But Chromium-based browsers tint
+     their chrome from theme-color, and Silk is Chromium-based, so it costs
+     nothing to ask. Kept in step with the current palette by applyMode().
+     UNVERIFIED on Silk: if it is ignored the bar simply stays blue. -->
+<meta name="theme-color" id="theme-color" content="#f6f2e9">
 <title>Mom's Board</title>
 <style>
   /* ============================================================
@@ -72,6 +80,28 @@
     --paper:#080603; --card:#0e0b06; --ink:#c0831f;
     --muted:#7a5219; --soft:#9a6a22; --line:#241a10;
     --done:#8a6a2a; --done-ink:#8a6a2a; --mark:#8a6a2a; --note-ink:#b07d29;
+  }
+
+  /* ---- BEDROOM NIGHT: deeper still ----------------------------------
+     The anticipated palette split, now built. Keyed on the SCREEN, not on
+     the layout, and that distinction matters: a focus takeover uses the
+     single-message layout on every screen, so keying this on
+     [data-layout="single"] would also dim a 2pm takeover in the living room,
+     where she is awake and reading. The thing being targeted is the room, so
+     the selector names the room.
+
+     Ground goes to true black and the amber drops about a stop. She is in bed;
+     this only has to be readable if she looks at it, and every lumen it does
+     not emit is the point. The big message still clears 3:1 at its size — see
+     the measured contrast in HANDOFF — but this is dimmer than anything the
+     living areas get, deliberately.
+
+     Applies to whatever the bedroom shows at night, the night message and a
+     takeover alike. Still provisional: nobody has seen it in the room. */
+  :root[data-screen="bedroom"][data-palette="night"]{
+    --paper:#000000; --card:#040201; --ink:#8f5d15;
+    --muted:#4e330b; --soft:#6b4610; --line:#150e06;
+    --done:#5e460f; --done-ink:#5e460f; --mark:#5e460f; --note-ink:#7a5214;
   }
   /* .grid is display:grid and .single is display:flex, either of which beats
      the UA's [hidden]{display:none}. Only one layout is ever in the DOM flow —
@@ -1025,6 +1055,16 @@ function applyMode(m){
   root.setAttribute('data-palette',m.night?'night':'day');
   root.setAttribute('data-layout',m.layout);
   root.setAttribute('data-mode',m.mode);
+  /* Ask Silk to tint its navigation bar to match. See the meta tag in <head>
+     for why this is a request rather than a fix. Read back from the computed
+     --paper so it always follows whichever palette block actually won,
+     including the deeper bedroom one — one source of truth, no second list of
+     colours to keep in step. */
+  const meta=document.getElementById('theme-color');
+  if(meta){
+    const bg=getComputedStyle(root).getPropertyValue('--paper').trim();
+    if(bg) meta.setAttribute('content',bg);
+  }
 }
 
 /* 8. PAINT — assemble what to show from whatever state we have */
@@ -1259,6 +1299,11 @@ function applyTestHooks(){
 }
 
 /* 14. BOOT */
+/* Which screen this is, onto <html>, before the first paint — the bedroom's
+   deeper night palette is a CSS selector on it, so it has to be there before
+   anything renders. Never changes afterwards; ?screen= is fixed for the life
+   of the page. */
+document.documentElement.setAttribute('data-screen',SCREEN);
 restore();
 applyTestHooks();             /* after restore(), so a hook always wins    */
 fit();

@@ -122,6 +122,25 @@ the 4K Select still idled. That is about as much activity as a page can
 generate, so **no further page-side "keep busy" trick will work.** Stop looking
 for one; the fix is at the device layer.
 
+**Silk's navigation bar is blue, always present, and not the page's to remove.**
+It already costs ~70px of height (hence the 1280×650 working viewport). It now
+also sets a floor on how dark the bedroom screen can be: the board can black
+out every pixel it owns and that bar still glows blue above it — the single
+worst colour to leave lit in a room somebody is trying to sleep in.
+
+The page does what little it can: `<meta name="theme-color">` is kept in step
+with the current palette, so at night it asks Silk to tint its chrome
+`#000000`. Chromium-based browsers honour this; **whether Silk does is
+unverified** and headless cannot answer it. Check it on the device — if the bar
+goes black at night, that is the answer; if it stays blue, the page has no
+further move.
+
+**If it stays blue, this becomes an argument for the WebView shell below**, which
+has no browser chrome at all. It was previously justified on reliability
+grounds; a blue bar in a bedroom is a second, independent reason. Consider it
+before spending long on palette tuning — no amount of darkening the page fixes
+a bar the page does not own.
+
 ### Built
 
 - **Heartbeat — remote observability, no camera required.** `doGet` now records
@@ -265,6 +284,11 @@ For Fire OS hardware: a minimal WebView shell — full screen,
 `FLAG_KEEP_SCREEN_ON`, auto-retry/reload on network failure, no browser chrome,
 no bookmarks, launchable by name ("Mom Display") and therefore by Alexa.
 
+**"No browser chrome" is now a feature in its own right**, not just tidiness:
+it is the only way to get rid of Silk's blue navigation bar, which is the
+brightest thing on the bedroom screen at night and outside the page's control.
+See *What the web app can and cannot do* above.
+
 **The existing web app stays the source of the UI.** The wrapper is a kiosk
 shell around this URL — do not rebuild the board natively. Everything in
 `HANDOFF.md` continues to apply unchanged inside a WebView.
@@ -292,14 +316,17 @@ assume forum answers apply to these OS versions.
 8. What does ADB add on the 2024 Fire OS Stick?
 9. Would a WebView wrapper materially improve reliability?
 
-10. **Is the night palette readable on the TABLE?** Live now, and the first
+10. **Does Silk honour `theme-color`?** One look at the bedroom (or any screen)
+    after 8pm answers it: black bar = yes, blue bar = no, and the WebView shell
+    becomes the only remaining route to a genuinely dark bedroom screen.
+11. **Is the night palette readable on the TABLE?** Live now, and the first
     thing to look at after 8pm. She actively reads that screen; the palette was
     designed for a glanced-at bedroom one. Contrast is measured in `HANDOFF.md`
     — the calendar's date column is the weak row. Not answerable headless.
-11. **Do the living areas want an earlier start than 8pm?** Moved 9pm→8pm on
+12. **Do the living areas want an earlier start than 8pm?** Moved 9pm→8pm on
     judgement, unverified in the room. A Sheet edit (`nightStart`) until the
     living areas and the bedroom need different windows — then it is code.
-12. **Does she tolerate a dim glow in the bedroom overnight?** Still unanswered
+13. **Does she tolerate a dim glow in the bedroom overnight?** Still unanswered
     and now blocked on the stick being installed. Needs a night in the room with
     somebody there. A clean "no" is a good result: it reinstates off-overnight
     for that display and nothing else changes.
