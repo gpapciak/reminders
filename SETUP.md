@@ -103,7 +103,7 @@ simply carries a warning and nothing is recorded.
 | focus | *(usually blank — see §3)* |
 | focusUntil | *(usually blank — see §3)* |
 | night | It's the middle of the night.\|You're home and safe.\|It's not morning yet. |
-| nightStart | 9:00 pm |
+| nightStart | 8:00 pm |
 | nightEnd | 6:00 am |
 
 - **standing** — the small grey line under the CALENDAR. Constant, shown every
@@ -124,9 +124,13 @@ simply carries a warning and nothing is recorded.
   anything above ~10 is safe from false alarms.
 - **focus** and **focusUntil** — a message that takes over the whole screen.
   Normally both blank. **See §3, "Putting one big message on the screen".**
-- **night**, **nightStart**, **nightEnd** — the quiet bedroom display overnight.
-  **See §4, "The bedroom at night".** All three are optional; leaving them out
-  gives you the defaults above.
+- **nightStart** and **nightEnd** — when every screen dims, and when it stops.
+  **Two separate rows** — one row saying `nightStart / nightEnd` does not work;
+  the board would ignore it and quietly keep 8:00 pm.
+- **night** — the message the *bedroom* shows once dimmed. The other screens
+  keep their usual board, so this does not affect them.
+- All three are optional; leaving them out gives the defaults above.
+  **See §4, "The evening and the bedroom at night".**
 
 ---
 
@@ -190,9 +194,9 @@ list — an unrecognised `focusUntil`, or one already in the past, says so there
 
 ---
 
-## 4. The bedroom at night
+## 4. The evening, and the bedroom at night
 
-**Every screen dims between 9pm and 6am** — near-black background, dim amber
+**Every screen dims between 8pm and 6am** — near-black background, dim amber
 text, no white or blue. What differs is what each one shows once dimmed:
 
 - **Table and living room — the whole board, just darker.** Same routine, same
@@ -208,7 +212,7 @@ text, no white or blue. What differs is what each one shows once dimmed:
 | Key | Value |
 |-----|-------|
 | night | It's the middle of the night.\|You're home and safe.\|It's not morning yet. |
-| nightStart | 9:00 pm |
+| nightStart | 8:00 pm |
 | nightEnd | 6:00 am |
 
 - All three are optional. Leave them out and you get exactly what is shown above.
@@ -221,7 +225,7 @@ text, no white or blue. What differs is what each one shows once dimmed:
 - Keep it true at *any* hour of the night, and keep it kind. It has to work at
   2am and at 5am with nobody there to explain it, so it should never say morning
   is close.
-- The times accept `9:00 pm`, `21:00`, or a time-formatted cell.
+- The times accept `8:00 pm`, `20:00`, or a time-formatted cell.
 - A **focus message overrides night**: if you raise one at 2am, the bedroom shows
   it in the dark palette rather than the night message. That is intentional —
   the acute thing wins, it just doesn't shout.
@@ -385,7 +389,7 @@ still a fact about that date no matter how old the fetch is.
 Sheet at all — useful for checking layout. The bare URL never shows demo data.
 
 With `?demo=1` you can also see the other two modes without touching the Sheet
-and without waiting for 9pm. Add any of these to that URL:
+and without waiting for 8pm. Add any of these to that URL:
 
 | Add | Shows |
 |---|---|

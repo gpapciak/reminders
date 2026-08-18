@@ -60,7 +60,7 @@ than replacing it. Dropping `?screen=` would move a display's heartbeat to the
 
 **Test hooks — all require `?demo=1`** and are inert without it, so a bookmarked
 TV URL cannot trip one. Night and focus are driven by the clock and the Sheet,
-so without these neither is reachable without waiting for 9pm or editing live
+so without these neither is reachable without waiting for 8pm or editing live
 data a household depends on.
 
 | Hook | Effect |
@@ -133,7 +133,7 @@ one from the other.
 
 | State | Palette | Layout | Which screens | Middle is… |
 |---|---|---|---|---|
-| **Day board** | day | full | all, 6am–9pm | — (the original board, unchanged) |
+| **Day board** | day | full | all, 6am–8pm | — (the original board, unchanged) |
 | **Night, full board** | night | full | table, living room, unknown | — same board, dimmed |
 | **Night, minimal** | night | single-message | bedroom | the night orientation text |
 | **Focus** | day *or* night | single-message | all | an ad-hoc takeover message |
@@ -272,14 +272,21 @@ the bedroom drops to one line. Note the bedroom is enabled in config but **no
 bedroom display exists yet — the stick is not installed**, so that branch is
 untested on hardware and its first real night is still a supervised event.
 
-- **⚠ THE NIGHT WINDOW IS PROVISIONAL AND EXPECTED TO SPLIT.** 9:00 pm – 6:00 am
-  LA, overridable via `nightStart` / `nightEnd` in `Settings`, and every screen
-  shares it. That window was chosen for **sleep** — dark while she is in bed —
-  which is the bedroom's problem. The living areas have a different one,
-  *evening brightness*, which starts nearer dusk, so those screens probably want
-  an **earlier start**. One window is deliberately all that is built; the lookup
-  goes through `nightWindowFor(cfg)` purely so a second one is a config change
-  rather than a rewrite. Do not hardcode `NIGHT_START_MIN` anywhere new.
+- **⚠ THE NIGHT WINDOW IS PROVISIONAL AND EXPECTED TO SPLIT.** 8:00 pm – 6:00 am
+  LA, overridable via the **two separate** `nightStart` and `nightEnd` keys in
+  `Settings`, and every screen shares the one window.
+
+  It was 9pm, chosen for **sleep** — dark while she is in bed — which is the
+  bedroom's problem. The living areas have a different one, *evening
+  brightness*, which starts nearer dusk, so **8pm** is Greg's judgement of the
+  better general rule. A judgement, not a measured result, and not yet looked
+  at in the room.
+
+  One window still serves both purposes and they will eventually want different
+  answers — the living areas possibly earlier still, the bedroom possibly later.
+  The lookup goes through `nightWindowFor(cfg)` purely so a second window is a
+  config change rather than a rewrite. Do not hardcode `NIGHT_START_MIN`
+  anywhere new.
 - Compared against `deviceNow()`, so a drifting Fire TV clock cannot flip a
   screen an hour early. Identical start and end reads as an *empty* window, not
   a 24-hour one — a typo must not be able to hold a display dark all day when
@@ -329,7 +336,7 @@ is not. The invariant forbids turning elapsed time into a **claim that something
 happened** — meds taken, a meal eaten, a routine item done. That is why routine
 items are never auto-greyed.
 
-Neither switch does that. Changing palette at 9pm is presentation. Retiring a
+Neither switch does that. Changing palette at 8pm is presentation. Retiring a
 focus message at its until-time **removes** an explicitly-authored statement and
 returns the board to its safe baseline. Time passing here only ever removes or
 restyles information; it never asserts an occurrence. This is an application of
@@ -338,11 +345,11 @@ midnight and drops an expired `{days:}` line — not an exception to *"nothing i
 inferred from time."*
 
 **Now that the palette applies to the full board on every screen, this is the
-case where it looks most like a violation** — at 9pm the whole board changes
+case where it looks most like a violation** — at 8pm the whole board changes
 colour, every card at once — so be exact about why it is fine. Restyling is not
 asserting. The routine says the same things in the same order, the calendar's
 checkmarks still come from comparing dates, and not one line means something
-different at 21:01 than it did at 20:59. The only thing the clock changed is
+different at 20:01 than it did at 19:59. The only thing the clock changed is
 how much light the panel emits, and that is measured: the dark full board
 resolves to *byte-identical* type sizes and row counts as the day board — only
 the colours differ.
@@ -528,10 +535,11 @@ Apps Script globals):
   Headless can prove it does not clip and can measure contrast ratios (see
   *Night* above, and the `--muted` row in particular); it cannot tell you
   whether an 86-year-old can read amber-on-near-black across a room. Look at the
-  table at 9pm before anything else. Dials, in order: the **ten night tokens**
+  table after 8pm before anything else. Dials, in order: the **ten night tokens**
   (contrast/darkness — `--muted` first), then the `[data-layout="full"]` split
   if one palette will not serve both screens.
-- **Whether the living areas want an earlier window.** 9pm is a sleep-shaped
+- **Whether the living areas want an earlier window still.** 8pm is already an
+  evening-shaped correction to a sleep-shaped
   answer to an evening-brightness problem. If the table is still glaring at
   8pm, that is `nightStart`, and it is a Sheet edit, not a code change — until
   the bedroom needs a different one from the living areas, which is the split

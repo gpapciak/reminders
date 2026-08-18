@@ -338,18 +338,22 @@ const DEFAULT_NIGHT =
   "It's the middle of the night.|You're home and safe.|It's not morning yet.";
 
 /* Night window, LA wall clock. Overridable per household via the Settings tab
-   (nightStart / nightEnd); these are the fallbacks. Every screen shares this
-   one window.
+   (nightStart and nightEnd — TWO separate keys, two separate rows; a single
+   "nightStart / nightEnd" row normalises to one key nothing reads, and the
+   board silently keeps these defaults). Every screen shares this one window.
 
    PROVISIONAL, AND THE EXPECTED NEXT TUNE IS TO SPLIT IT.
-   9pm–6am was chosen for SLEEP — dark while she is in bed — which is the
-   bedroom's problem. The living areas have a different problem: evening
-   brightness, which starts nearer dusk, so those screens probably want an
-   EARLIER start. One window is deliberately all that is built today; the
-   window is looked up per screen (nightWindowFor) purely so that adding a
-   second one is a config change rather than a rewrite. Do not hardcode
-   NIGHT_START_MIN anywhere new. */
-const NIGHT_START_MIN = 21*60;   /* 9:00 pm */
+   Was 9pm, chosen for SLEEP — dark while she is in bed — which is the
+   bedroom's problem. Moved to 8pm because the living areas have a different
+   problem: evening brightness, which starts nearer dusk. 8pm is Greg's
+   judgement of the better general rule, not a measured result.
+
+   One window still serves both purposes, and they will eventually want
+   different answers — the living areas earlier still, the bedroom possibly
+   later. The window is looked up per screen (nightWindowFor) purely so that
+   adding a second one is a config change rather than a rewrite. Do not
+   hardcode NIGHT_START_MIN anywhere new. */
+const NIGHT_START_MIN = 20*60;   /* 8:00 pm */
 const NIGHT_END_MIN   =  6*60;   /* 6:00 am */
 
 /* Per-screen config, keyed by ?screen=. THE TWO AXES ARE CHOSEN SEPARATELY:

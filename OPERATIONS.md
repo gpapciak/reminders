@@ -21,8 +21,8 @@ bedroom needs something more specific than "off".
 |---|---|---|
 | **Morning** | already on | display turns on / already on |
 | **Daytime** | board continuously available, self-recovering | same |
-| **Evening** | board stays up | board until 9pm |
-| **Evening (from 9pm)** | **board stays up, dimmed** — night palette, whole board, same content | dimmed and reduced to one line |
+| **Evening** | board stays up | board until 8pm |
+| **Evening (from 8pm)** | **board stays up, dimmed** — night palette, whole board, same content | dimmed and reduced to one line |
 | **Overnight** | as above — running 24/7 works | as above |
 | **Next morning** | continuous | back to the full board at 6am |
 
@@ -32,7 +32,7 @@ whole class of "did the morning power-on work?" failures, which is a real
 reliability gain given that recovery has to happen from 5,000 miles away. A
 screen that never goes off cannot fail to come back.
 
-**All three screens now dim at 9pm — this supersedes the earlier
+**All three screens now dim at 8pm — this supersedes the earlier
 bedroom-only-night note.** What differs between them is not *whether* they dim
 but *what they show once dimmed*, and that is because they have two different
 problems:
@@ -60,9 +60,9 @@ trying again; if a glow is the problem, less glow is still the problem.
 designed for a glanced-at bedroom screen, and the table is the opposite — she
 *actively reads* it at ~32 inches with aging eyes. Whether amber-on-near-black
 is readable enough there is a judgement that needs the room; contrast has been
-measured and the numbers are in `HANDOFF.md`. **Look at the table at 9pm before
+measured and the numbers are in `HANDOFF.md`. **Look at the table after 8pm before
 anything else**, and treat "less off-putting in the evening" as not worth having
-if it costs her the calendar. Both the palette and the 9pm start are provisional.
+if it costs her the calendar. Both the palette and the 8pm start are provisional.
 
 The governing constraint is unchanged: **she cannot troubleshoot.** No opening
 Silk, no bookmarks, no typing URLs, no switching HDMI inputs, no clearing a "No
@@ -83,7 +83,7 @@ bedroom question, and only if the night variant fails its test.
 |---|---|---|
 | **Table (primary)** | Insignia 24" F20, **Fire TV built in**, 720p | Board already runs here. Screensaver can be set to Never; sleep timer maxes at 240 min. Behaves differently from the external Sticks. |
 | **Living room** | LG TV + Fire TV Stick | Main test rig for external sticks. CEC = "SIMPLINK". |
-| **Bedroom** | Hisense TV + Fire TV Stick | **Stick not installed yet.** **Must not be lit like a day board overnight.** Configured for the minimal night variant (9pm–6am: dark screen, dim amber, one line), never run on hardware. First night is supervised; if a glow is not tolerable, this display goes off overnight instead. |
+| **Bedroom** | Hisense TV + Fire TV Stick | **Stick not installed yet.** **Must not be lit like a day board overnight.** Configured for the minimal night variant (8pm–6am: dark screen, dim amber, one line), never run on hardware. First night is supervised; if a glow is not tolerable, this display goes off overnight instead. |
 
 ### Two incompatible Stick architectures
 
@@ -160,7 +160,7 @@ for one; the fix is at the device layer.
 
 - **The night variant, and the focus takeover.** Both are page-level, both are
   described in `HANDOFF.md`; the operational points are:
-  - **every screen dims 9pm–6am** on the server's clock, so a drifting Fire TV
+  - **every screen dims 8pm–6am** on the server's clock, so a drifting Fire TV
     clock cannot switch one at the wrong hour. The living areas keep the whole
     board and only change colour; the bedroom drops to one line;
   - so a dark screen in the evening is now **expected**, not a fault — check
@@ -293,12 +293,12 @@ assume forum answers apply to these OS versions.
 9. Would a WebView wrapper materially improve reliability?
 
 10. **Is the night palette readable on the TABLE?** Live now, and the first
-    thing to look at after 9pm. She actively reads that screen; the palette was
+    thing to look at after 8pm. She actively reads that screen; the palette was
     designed for a glanced-at bedroom one. Contrast is measured in `HANDOFF.md`
     — the calendar's date column is the weak row. Not answerable headless.
-11. **Do the living areas want an earlier start than 9pm?** 9pm is a
-    sleep-shaped answer to an evening-brightness problem. A Sheet edit
-    (`nightStart`) until the two need different windows.
+11. **Do the living areas want an earlier start than 8pm?** Moved 9pm→8pm on
+    judgement, unverified in the room. A Sheet edit (`nightStart`) until the
+    living areas and the bedroom need different windows — then it is code.
 12. **Does she tolerate a dim glow in the bedroom overnight?** Still unanswered
     and now blocked on the stick being installed. Needs a night in the room with
     somebody there. A clean "no" is a good result: it reinstates off-overnight
