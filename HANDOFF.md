@@ -344,15 +344,25 @@ untested on hardware and its first real night is still a supervised event.
   gap is an artifact of picking amber values for a screen where `--muted` is
   barely used, not a decision anybody made about the full board.
 
-- **The split is now half-built: the bedroom has its own deeper block.**
-  Requested because the bedroom needs to be darker than the living areas can
-  afford to be. Ground goes to true black and the amber drops about a stop:
+- **The split is now half-built: the bedroom has its own deeper block, pushed
+  in two passes.** Requested because the bedroom needs to be darker than the
+  living areas can afford to be. Pass 1 held every value at or above the WCAG
+  large-text floor (3:1). Pass 2, on request, dropped it below that floor on
+  purpose — `--ink`/`--soft` are the only two tokens the bedroom's
+  single-message layout ever renders (no card, no calendar, so `--card` /
+  `--muted` / `--line` / `--done*` / `--note-ink` are set but inert there),
+  and both were pushed down, deliberately unevenly — `--ink` (the message)
+  stays the more legible of the two, `--soft` (the clock, secondary) goes
+  further, so the one thing worth reading if she looks stays the readable one.
+  The single-message type ceiling (`MSG_MAX_NIGHT`) came down alongside it, for
+  less lit area on top of dimmer pixels:
 
   | | Living areas | Bedroom |
   |---|---|---|
   | ground | `#080603` | `#000000` |
-  | message / header | 6.1–6.3:1 | **3.74:1** |
-  | clock | 4.30:1 | 2.51:1 |
+  | message / header | 6.1–6.3:1 | **2.17:1** (was 6.27, then 3.74) |
+  | clock | 4.30:1 | **1.47:1** (was 2.51) |
+  | message ceiling | — | **56px** (was 72) |
 
   **Keyed on the SCREEN, not the layout** — `[data-screen="bedroom"]
   [data-palette="night"]` — and that distinction is load-bearing. The earlier
@@ -362,6 +372,21 @@ untested on hardware and its first real night is still a supervised event.
   where she is awake and reading it. The thing being targeted is the room, so
   the selector names the room. Verified: a living-room takeover at night keeps
   the readable night palette, and the deeper block does not leak.
+
+  **A real bug on the way to pass 2, worth flagging so it isn't repeated:** a
+  comment describing the inert tokens wrote their names with `--` and `/`
+  between them and happened to type `--done*/--note-ink` — the literal
+  characters `*` `/` back to back, which is a CSS block-comment terminator.
+  The comment closed early; every remaining line of that comment, plus the
+  rest of the intended comment text, was then parsed as raw (invalid) CSS —
+  and the whole `:root[data-screen="bedroom"]...` rule after it vanished
+  silently, dropped by the parser. Headless testing did not catch it either,
+  because nothing asserted the bedroom's colours were *different* from the
+  shared night palette's, only that they were present. Caught by hand-checking
+  `document.styleSheets[0].cssRules` after the values didn't move. **Never
+  write a literal `*/` inside a CSS comment, including inside prose describing
+  custom-property names — say them as plain words, not with a stray `*` next
+  to a `/`.**
 
   What is still **not** built is the other half — a *gentler* dim for the
   living-area full board, if the shared night palette turns out to be too dark
@@ -580,18 +605,19 @@ Apps Script globals):
   (contrast/darkness — `--muted` first), then the `[data-layout="full"]` split
   if one palette will not serve both screens.
 - **Whether the living areas want an earlier window still.** 8pm is already an
-  evening-shaped correction to a sleep-shaped
-  answer to an evening-brightness problem. If the table is still glaring at
-  8pm, that is `nightStart`, and it is a Sheet edit, not a code change — until
-  the bedroom needs a different one from the living areas, which is the split
-  flagged above.
+  evening-shaped correction to what was a sleep-shaped default. If the table is
+  still glaring at 8pm, that is `nightStart`, a Sheet edit, not a code change —
+  until the bedroom needs a different one from the living areas, which is the
+  split flagged above.
 - **Whether she tolerates a dim amber glow in the bedroom overnight.** Untested
   and untestable for now — the stick is not installed. When it is, the first
   night is a supervised event. If she cannot sleep with it, the answer is to
   switch that display off overnight at the device layer rather than to soften
-  the palette further — see `OPERATIONS.md`. If it is merely too bright, dial
-  **`MSG_MAX_NIGHT`** (currently 72, provisional — less lit area) before
-  touching colour.
+  the palette further — see `OPERATIONS.md`. It has already been pushed twice
+  on request (darker `--ink`/`--soft`, lower `MSG_MAX_NIGHT`, now 56); both
+  remain provisional and there is more room to go dimmer in either dial if the
+  room says so, but there is also a floor below which "darker" becomes
+  "unreadable if she does look", and only the room can say where that is.
 - Whether 25px routine type is readable from her chair.
 - Whether Silk survives days of uptime. There is an hourly `location.replace()`
   reload as a watchdog, untested over a long run.

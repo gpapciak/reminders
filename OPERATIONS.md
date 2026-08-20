@@ -51,10 +51,16 @@ problems:
 is not installed**, so that branch has never run on hardware. When it goes in,
 the first night is a supervised event — whether she tolerates a dim glow in the
 room at all is unanswered, and the person who finds out should not be her,
-alone, at 3am. If she cannot sleep with it, the answer is to switch that display
-off overnight at the device layer — the original target for the bedroom,
-unchanged and still valid. Do not respond by dimming the palette further and
-trying again; if a glow is the problem, less glow is still the problem.
+alone, at 3am.
+
+The palette has already been pushed darker twice on request, pre-emptively,
+before that first night — see `HANDOFF.md` for the numbers. **That is not the
+same move as responding to a failed test by dimming further and trying again.**
+If the first supervised night says she cannot sleep with it at all, the answer
+is to switch that display off overnight at the device layer — the original
+target for the bedroom, unchanged and still valid — not another round of
+darker tokens. If a glow is the problem, less glow is still the problem; the
+two are different failure modes and only the first one has a code fix.
 
 **And one about the living-area half, which is live now.** The night palette was
 designed for a glanced-at bedroom screen, and the table is the opposite — she

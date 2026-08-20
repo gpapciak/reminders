@@ -90,18 +90,36 @@
      where she is awake and reading. The thing being targeted is the room, so
      the selector names the room.
 
-     Ground goes to true black and the amber drops about a stop. She is in bed;
-     this only has to be readable if she looks at it, and every lumen it does
-     not emit is the point. The big message still clears 3:1 at its size — see
-     the measured contrast in HANDOFF — but this is dimmer than anything the
-     living areas get, deliberately.
+     Ground is true black. She is in bed; this only has to be readable if she
+     looks at it, and every lumen it does not emit is the point.
 
-     Applies to whatever the bedroom shows at night, the night message and a
-     takeover alike. Still provisional: nobody has seen it in the room. */
+     ONLY --paper, --ink AND --soft ARE EVER SEEN HERE. The bedroom's night
+     layout is the single-message one — no card, no calendar, no notes — so
+     the remaining tokens below (card, muted, line, done, mark, note-ink) are
+     inert on this screen; they are set for completeness (a takeover could
+     theoretically reuse a card class later) but nothing currently renders
+     them. If you are hunting for what controls what's ON SCREEN here, it is
+     exactly these three. (An earlier draft of this comment wrote those names
+     with -- and / between them and accidentally spelled the literal
+     characters "*" "/" back to back, which ends a CSS comment early — the
+     whole rule below silently vanished as a result. Say custom-property
+     names as prose here, never with a stray * next to a /.)
+
+     Pushed deliberately BELOW the WCAG large-text floor (3:1) that the shared
+     night palette above happens to clear. That floor was never a stated
+     requirement for this screen — the design intent recorded elsewhere in
+     this file is "legibility traded for darkness on purpose" for a
+     glance-if-you-look screen, and holding to 3:1 was a stricter line than
+     that intent called for. --ink now measures ~2.2:1, --soft ~1.5:1.
+     Deliberately NOT equal: --ink carries the message, which is the one
+     thing worth being able to read if she does look; --soft carries only the
+     clock, which matters less. Still provisional, still needs the room —
+     if it turns out unreadable even glancing, back off ONE of these two
+     tokens rather than both, to keep that hierarchy intact. */
   :root[data-screen="bedroom"][data-palette="night"]{
-    --paper:#000000; --card:#040201; --ink:#8f5d15;
-    --muted:#4e330b; --soft:#6b4610; --line:#150e06;
-    --done:#5e460f; --done-ink:#5e460f; --mark:#5e460f; --note-ink:#7a5214;
+    --paper:#000000; --card:#040201; --ink:#603d0e;
+    --muted:#3c2609; --soft:#3c2609; --line:#0d0803;
+    --done:#3c2609; --done-ink:#3c2609; --mark:#3c2609; --note-ink:#4a2f0b;
   }
   /* .grid is display:grid and .single is display:flex, either of which beats
      the UA's [hidden]{display:none}. Only one layout is ever in the DOM flow —
@@ -434,15 +452,17 @@ const DEFAULT_SCREEN_MODE = { night:true, nightLayout:'full' };
    which is exactly what the night palette exists to avoid. Measured at 1280x650
    the default night text lands on three calm lines with air around them.
 
-   MSG_MAX_NIGHT IS PROVISIONAL — 72 is a starting point, not a settled number,
-   and it is a candidate to come DOWN. That the direction was right was decided
-   by looking at the render; how far is right cannot be, because the question is
-   how much light a dark bedroom gets at 3am, which no headless measurement can
-   answer. It has to be seen in the room, on the same night as the "does she
-   tolerate a dim glow at all" test (see HANDOFF.md). Tune it there. Do not
-   treat 72 as load-bearing, and do not let a later edit "restore" it to
-   MSG_MAX for consistency with focus — the two modes want opposite things. */
-const MSG_MAX = 160, MSG_MAX_NIGHT = 72, MSG_MIN = 15;
+   MSG_MAX_NIGHT IS PROVISIONAL — 56 (moved down from an initial 72, on
+   request, alongside darkening the bedroom's ink token) is a starting point,
+   not a settled number, and remains a candidate to come down further. That
+   the direction was right was decided by looking at the render; how far is
+   right cannot be, because the question is how much light a dark bedroom gets
+   at 3am, which no headless measurement can answer. It has to be seen in the
+   room, on the same night as the "does she tolerate a dim glow at all" test
+   (see HANDOFF.md). Tune it there. Do not treat 56 as load-bearing, and do not
+   let a later edit "restore" it to MSG_MAX for consistency with focus — the
+   two modes want opposite things. */
+const MSG_MAX = 160, MSG_MAX_NIGHT = 56, MSG_MIN = 15;
 
 /* ---- URL flags and device identity ---------------------------------
    ?demo=1   sample content, no endpoint — layout work only.
