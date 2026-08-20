@@ -128,18 +128,44 @@ also sets a floor on how dark the bedroom screen can be: the board can black
 out every pixel it owns and that bar still glows blue above it — the single
 worst colour to leave lit in a room somebody is trying to sleep in.
 
-The page does what little it can: `<meta name="theme-color">` is kept in step
-with the current palette, so at night it asks Silk to tint its chrome
-`#000000`. Chromium-based browsers honour this; **whether Silk does is
-unverified** and headless cannot answer it. Check it on the device — if the bar
-goes black at night, that is the answer; if it stays blue, the page has no
-further move.
+**`theme-color` — tried, confirmed to fail.** `<meta name="theme-color">` was
+kept in step with the current palette, asking Silk to tint its chrome
+`#000000` at night. **Checked on hardware: the bar stayed blue.** Chromium
+honours this meta tag in general; Silk specifically does not. Ruled out, not
+theoretical.
 
-**If it stays blue, this becomes an argument for the WebView shell below**, which
-has no browser chrome at all. It was previously justified on reliability
-grounds; a blue bar in a bedroom is a second, independent reason. Consider it
-before spending long on palette tuning — no amount of darkening the page fixes
-a bar the page does not own.
+**Fullscreen API — a second, more drastic request, built as an experiment.**
+`theme-color` asks the browser to *recolour* its chrome; Fullscreen asks it to
+*remove* it. Different lever, and it is the one page-side idea left before the
+WebView shell. Same posture as the Wake Lock experiment above — labelled,
+harmless if refused, and the answer is visible under `?debug=1` as a `FULL`
+line (`ACTIVE` / `DENIED` / `UNSUPPORTED`, plus how many times it dropped).
+
+**Deliberately scoped to `?screen=bedroom` only.** That is the one screen this
+matters for, and — because the bedroom stick is not installed — the one screen
+where an unproven browser-chrome experiment risks nothing. It is never
+attempted on the table or living room; how it behaves around the Fire TV
+idle/HOME recovery path (see *Recovery hierarchy* below) is genuinely unknown,
+and that is not a risk worth taking on a display already working unattended.
+
+**Requesting fullscreen almost always needs a user gesture, and this page gets
+none automatically.** The boot-time attempt is expected to be refused for
+exactly that reason — a refusal is a clean result, same as `UNSUPPORTED` would
+be. It also retries from inside any `keydown` / `pointerdown` / `click` the
+page ever receives, on the chance a Fire TV remote press is ever delivered to
+the page as a real event; a request made from inside that handler has an actual
+chance where the boot-time one does not.
+
+**Not yet tried on the device.** When the bedroom stick goes in, check
+`?debug=1`: `FULL ACTIVE` means the bar is genuinely gone (and the stage should
+also have gained back the ~70px Silk's bar was costing — worth glancing at the
+type size too); `DENIED` or `UNSUPPORTED` is a clean negative, same standing as
+the wake lock's. **Either way, that is the point at which the WebView shell
+below stops being a "maybe" and becomes the next real step** — it was already
+justified on reliability grounds, and a bar the page provably cannot remove is
+a second, independent reason pointing the same way. No further page-side idea
+exists after this one; don't keep tuning colours against a bar neither
+experiment could reach.
 
 ### Built
 
@@ -316,17 +342,20 @@ assume forum answers apply to these OS versions.
 8. What does ADB add on the 2024 Fire OS Stick?
 9. Would a WebView wrapper materially improve reliability?
 
-10. **Does Silk honour `theme-color`?** One look at the bedroom (or any screen)
-    after 8pm answers it: black bar = yes, blue bar = no, and the WebView shell
-    becomes the only remaining route to a genuinely dark bedroom screen.
-11. **Is the night palette readable on the TABLE?** Live now, and the first
+10. **Does Silk honour `theme-color`? — Answered: no.** Checked on hardware,
+    the bar stayed blue. Kept here as a record, not an open item.
+11. **Does Silk honour Fullscreen?** Still open, and now instrumented —
+    `?debug=1` on the bedroom display reads `FULL ACTIVE`/`DENIED`/
+    `UNSUPPORTED`. Either a clean negative or the WebView shell becomes the
+    only remaining route to a genuinely dark bedroom screen.
+12. **Is the night palette readable on the TABLE?** Live now, and the first
     thing to look at after 8pm. She actively reads that screen; the palette was
     designed for a glanced-at bedroom one. Contrast is measured in `HANDOFF.md`
     — the calendar's date column is the weak row. Not answerable headless.
-12. **Do the living areas want an earlier start than 8pm?** Moved 9pm→8pm on
+13. **Do the living areas want an earlier start than 8pm?** Moved 9pm→8pm on
     judgement, unverified in the room. A Sheet edit (`nightStart`) until the
     living areas and the bedroom need different windows — then it is code.
-13. **Does she tolerate a dim glow in the bedroom overnight?** Still unanswered
+14. **Does she tolerate a dim glow in the bedroom overnight?** Still unanswered
     and now blocked on the stick being installed. Needs a night in the room with
     somebody there. A clean "no" is a good result: it reinstates off-overnight
     for that display and nothing else changes.

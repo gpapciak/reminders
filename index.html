@@ -1188,7 +1188,74 @@ function requestWakeLock(){
   }
 }
 
-/* 11. ?debug=1 READOUT — diagnostics for a screen nobody can walk up to. */
+/* 11. FULLSCREEN — a second EXPERIMENT, this one aimed specifically at
+   Silk's own chrome, not at Fire TV sleep.
+
+   theme-color (see <head>) asked Silk to TINT its blue navigation bar to match
+   the palette. Confirmed on hardware: Silk ignores it — the bar stayed blue.
+   That is a colour the page does not control.
+
+   Fullscreen is the other lever a web page has over browser chrome, and it is
+   a different kind of request: not "recolour your bar" but "get rid of it".
+   Many mobile/TV browsers collapse their UI entirely in fullscreen. If Silk
+   does, the bar is not tinted — it is GONE, and the stage also gets back
+   whatever height it was costing (see fit(), which currently treats that loss
+   as a fact of life).
+
+   SCOPED TO THE BEDROOM SCREEN ONLY, deliberately. This is the one screen the
+   darkness matters for, and — as importantly — the one screen with no
+   hardware yet, so an unproven browser-chrome experiment carries zero risk to
+   a display that is already working unattended. It is never attempted on the
+   table or living room, and how it behaves around the Fire TV idle/HOME
+   recovery path (see OPERATIONS.md) is untested — one more reason to keep it
+   off the two screens that cannot afford a new failure mode.
+
+   Fullscreen almost always requires a user gesture, and this page is never
+   clicked — nobody is holding a remote at a menu. The boot-time request is
+   expected to be refused for exactly that reason; it still runs, because
+   Silk's policy here is unknown and a refusal is a clean, informative
+   negative — same posture as the wake lock above. The keydown/pointerdown
+   listeners exist for the one case that could turn it from a negative into a
+   result: if the remote ever delivers a real input event to the page (an
+   accidental button press), a request made from INSIDE that handler is a
+   genuine user gesture and has a real chance where the boot-time one did not.
+
+   Unlike the wake lock, this DOES re-request itself promptly on drop — the
+   goal here is a working outcome, not an instrument for measuring how often
+   the system reclaims something. fsDrops is kept only as a diagnostic. */
+let fsState='INIT', fsDetail='', fsDrops=0;
+function fsApplies(){ return SCREEN==='bedroom'; }
+function fsElement(){
+  return document.fullscreenElement||document.webkitFullscreenElement||
+         document.mozFullScreenElement||document.msFullscreenElement||null;
+}
+function requestFullscreenExperiment(){
+  if(!fsApplies()) return;
+  if(fsElement()){ fsState='ACTIVE'; return; }
+  const el=document.documentElement;
+  const req=el.requestFullscreen||el.webkitRequestFullscreen||
+            el.mozRequestFullScreen||el.msRequestFullscreen;
+  if(!req){ fsState='UNSUPPORTED'; return; }
+  try{
+    const r=req.call(el);
+    if(r&&r.then){
+      r.then(function(){ fsState='ACTIVE'; fsDetail=''; })
+       .catch(function(err){ fsState='DENIED'; fsDetail=(err&&err.name)||String(err); });
+    }
+    /* Some prefixed implementations return undefined rather than a promise;
+       the fullscreenchange listener below is what actually settles those. */
+  }catch(err){ fsState='DENIED'; fsDetail=(err&&err.name)||String(err); }
+}
+['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange']
+  .forEach(function(evt){
+    document.addEventListener(evt,function(){
+      if(!fsApplies()) return;
+      if(fsElement()){ fsState='ACTIVE'; }
+      else{ if(fsState==='ACTIVE') fsDrops++; fsState='RELEASED'; }
+    });
+  });
+
+/* 12. ?debug=1 READOUT — diagnostics for a screen nobody can walk up to. */
 let dbgEl=null;
 function shortAgo(ms){
   if(!ms) return 'never';
@@ -1218,14 +1285,18 @@ function debugPaint(){
      server, unlike lastOkAt which is a local Date.now() stamp. */
   const until=(parts[0]==='focus'&&focusUntilMs)?
               ' till '+fmtTime.format(new Date(focusUntilMs)):'';
+  /* Only printed on the one screen the experiment runs on \u2014 a blank line
+     here would just be noise on the table or living room. */
+  const fsWhy=fsDetail?' ('+fsDetail+')':'';
+  const fsLine=fsApplies()?'\nFULL '+fsState+fsWhy+'   drops '+fsDrops:'';
   dbgEl.textContent=
-    'WAKE '+wakeState+age+why+'   releases '+wakeReleases+'\n'+
+    'WAKE '+wakeState+age+why+'   releases '+wakeReleases+fsLine+'\n'+
     SCREEN+'   data '+shortAgo(lastOkAt)+'   beat '+hbState+
     '   mode '+mode+until+
     '   '+window.innerWidth+'\u00d7'+window.innerHeight;
 }
 
-/* 12. FIT — fill the screen.
+/* 13. FIT — fill the screen.
    Silk on the Fire TV keeps a top navigation bar, so the viewport is
    SHORTER than 720 CSS px. Scaling by min(w/1280, h/720) made height the
    binding constraint, which shrank everything and left black bars down
@@ -1254,7 +1325,7 @@ function fitHeader(){
           Math.round(72*vScale), Math.round(38*vScale));
 }
 
-/* 13. TEST HOOKS — see the flag block at the top. ?demo=1 only.
+/* 14. TEST HOOKS — see the flag block at the top. ?demo=1 only.
    The live board never converts an LA wall-clock time into an instant; the
    server does that, once, for focusUntil. This direction exists only so the
    night boundary and a focus expiry can be driven from a URL. Two passes,
@@ -1298,7 +1369,7 @@ function applyTestHooks(){
   }
 }
 
-/* 14. BOOT */
+/* 15. BOOT */
 /* Which screen this is, onto <html>, before the first paint — the bedroom's
    deeper night palette is a CSS selector on it, so it has to be there before
    anything renders. Never changes afterwards; ?screen= is fixed for the life
@@ -1310,6 +1381,7 @@ fit();
 tick();                       /* paints from restored/empty state at once */
 loadData();
 requestWakeLock();
+requestFullscreenExperiment();  /* no-op unless SCREEN==='bedroom'          */
 debugPaint();
 
 setInterval(tick,1000);       /* live clock + date rollover at midnight   */
@@ -1321,6 +1393,19 @@ setInterval(debugPaint,1000); /* no-op without ?debug=1                   */
 setInterval(function(){
   if(wakeState!=='ACTIVE'&&wakeState!=='UNSUPPORTED') requestWakeLock();
 },60*1000);
+/* Faster retry than the wake lock's, on purpose: unlike that experiment this
+   one wants a working outcome, not a slow-motion measurement, so a drop is
+   picked back up within seconds rather than a minute. No-op off the bedroom. */
+setInterval(function(){
+  if(fsState!=='ACTIVE'&&fsState!=='UNSUPPORTED') requestFullscreenExperiment();
+},5*1000);
+/* The best chance this has: a real event delivered TO THE PAGE, which is the
+   one thing that can make requestFullscreen count as user-gesture-initiated.
+   Harmless to attach on every screen — fsApplies() gates the actual attempt,
+   so this is inert everywhere except the bedroom. */
+['keydown','pointerdown','click'].forEach(function(evt){
+  document.addEventListener(evt,requestFullscreenExperiment);
+});
 /* The hourly reload must CARRY THE FLAGS. location.replace('?v=…') replaces
    the entire query string, so a display booted as ?screen=table would come
    back an hour later as an anonymous one and its heartbeat would move to the
@@ -1342,10 +1427,15 @@ function reloadUrl(){
 }
 setTimeout(function(){ location.replace(reloadUrl()); },RELOAD_MS);
 
+/* fit() already reads window.innerHeight fresh every call, so a fullscreen
+   entry/exit — which fires 'resize' — is handled by the SAME path as a Silk
+   window resize, with no fullscreen-specific layout code needed. Getting the
+   nav bar's height back is just a slightly taller viewport as far as fit() is
+   concerned. */
 window.addEventListener('resize',function(){ fit(); fitHeader(); paint(); debugPaint(); });
 window.addEventListener('online',loadData);
 document.addEventListener('visibilitychange',function(){
-  if(!document.hidden){ loadData(); requestWakeLock(); }
+  if(!document.hidden){ loadData(); requestWakeLock(); requestFullscreenExperiment(); }
 });
 </script>
 </body>

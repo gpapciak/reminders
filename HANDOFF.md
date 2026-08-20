@@ -27,13 +27,29 @@ layer: see `OPERATIONS.md`.
   viewport is roughly 1280×650, not 1280×720. Confirmed on the device.
   **That bar is blue and always present**, which is a real limit on how dark a
   bedroom screen can get: the page can black out every pixel it owns and the
-  bar still glows. The page cannot remove browser chrome. Two levers exist and
-  only one is page-side: `<meta name="theme-color">`, which Chromium-based
-  browsers use to tint their own chrome and which `applyMode()` keeps in step
-  with the current palette (so it asks for `#000000` in the bedroom at night).
-  **Unverified on Silk** — headless proves nothing here, exactly like the wake
-  lock; if Silk ignores it the bar stays blue and nothing else changes. The
-  durable fix is the WebView shell in `OPERATIONS.md`, which has no chrome.
+  bar still glows. The page cannot remove browser chrome outright, but two
+  page-side requests exist:
+
+  - **`<meta name="theme-color">`** — asks Silk to *tint* its chrome to match
+    the current palette (`applyMode()` keeps it in step; `#000000` in the
+    bedroom at night). **Confirmed on hardware: Silk ignores it.** The bar
+    stayed blue. Left in the page — it costs nothing, and it may matter on a
+    future browser or device — but it is not the answer.
+  - **Fullscreen API** — asks Silk to *remove* its chrome, not recolour it.
+    A different and more drastic request; some mobile/TV browsers collapse
+    their whole UI in fullscreen. **Built as a second experiment**, same
+    posture as the wake lock: labelled, safe to fail, visible under
+    `?debug=1` (`FULL ACTIVE` / `DENIED` / `UNSUPPORTED`, plus a drop count).
+    **Scoped to `?screen=bedroom` only** — the one screen this matters for
+    and, not incidentally, the one screen with no hardware yet, so an
+    unproven experiment risks nothing on a display already working
+    unattended. Requested on boot (expected to be refused — no user gesture
+    exists to grant it) and retried from inside any `keydown` /
+    `pointerdown` / `click` the page ever receives, on the chance a Fire TV
+    remote press ever reaches it as a real gesture. **Not yet tried on the
+    device** — the bedroom stick isn't installed. If it also fails, the
+    durable fix is the WebView shell in `OPERATIONS.md`, which has no chrome
+    to ask permission from.
 - A living-room Fire TV Stick also runs the same page. **The bedroom stick is
   not installed yet**, so the bedroom's night behaviour is configured but has
   never run on hardware. All three screens dim at night; only the bedroom drops
