@@ -14,10 +14,11 @@ Create a new Google Sheet called **Mom's Board**, then:
 Do this first. Date cells are stored at midnight in the *spreadsheet's* timezone,
 so a Sheet left on the wrong zone shifts every date by a day.
 
-Make four tabs, named exactly **Days**, **Events**, **Settings** and **Status**
-(the last one stays empty — the board fills it in). Row 1 is headers in the
-first three. Column order does not matter — the script matches on the
-header text — but the spelling does.
+Make five tabs, named exactly **Days**, **Events**, **Settings**, **Status**
+and **Media** (Status stays empty always — the board fills it in; Media can
+stay empty until you want photo moments — see §5 below). Row 1 is headers in
+the rest. Column order does not matter — the script matches on the header
+text — but the spelling does.
 
 ### Tab: `Days` — one row per date
 
@@ -92,6 +93,18 @@ display that died last night would still read "2 min ago" this morning.
 If the tab does not exist the board works exactly as before; the response
 simply carries a warning and nothing is recorded.
 
+### Tab: `Media` — one row per photo, for occasional "photo moments"
+
+| File | Caption | Screens |
+|------|---------|---------|
+| kathy-summer-2024.jpg | Kathy, your daughter — summer 2024 | |
+| garden-2023.jpg | Your garden last spring | table |
+
+Optional in every sense — see **§5, "Photo moments"** below for what this
+does, how to add a photo, and the safety model behind it. Leave the tab empty
+(or don't make it at all) and nothing changes: no photo ever appears, which is
+the deliberate default.
+
 ### Tab: `Settings` — key/value
 
 | Key | Value |
@@ -105,6 +118,9 @@ simply carries a warning and nothing is recorded.
 | night | It's the middle of the night.\|You're home and safe.\|It's not morning yet. |
 | nightStart | 8:00 pm |
 | nightEnd | 6:00 am |
+| media | *(blank — see §5)* |
+| mediaEveryMin | *(blank — see §5)* |
+| mediaHoldSec | *(blank — see §5)* |
 
 - **standing** — the small grey line under the CALENDAR. Constant, shown every
   day. Break it across lines with a pipe **or** Alt+Enter inside the cell:
@@ -131,6 +147,9 @@ simply carries a warning and nothing is recorded.
   keep their usual board, so this does not affect them.
 - All three are optional; leaving them out gives the defaults above.
   **See §4, "The evening and the bedroom at night".**
+- **media**, **mediaEveryMin**, **mediaHoldSec** — the photo moments master
+  switch and its timing. All optional; leaving them out means no photo moments
+  at all, which is the default. **See §5, "Photo moments".**
 
 ---
 
@@ -237,7 +256,84 @@ other treatment, that is a one-line change.
 
 ---
 
-## 5. Publish the script
+## 5. Photo moments
+
+Off by default. Turn it on and, every hour or so, a curated family photo
+fades in over the whole board, holds for about half a minute, and fades back
+— a moment of warmth without giving up the board's *constancy*, which is
+what actually does the reassuring day to day. It never appears at night, on
+the bedroom, or while a takeover message is up, and it only ever shows a
+photo you added yourself: nothing is ever pulled in from anywhere else.
+
+**Why it is off by default, and why it stays gentle even switched on.** She
+recently had a minor stroke, and a photo can land harder and faster than
+expected — so the whole feature leans calm on purpose: still images only, one
+at a time, a couple of times an afternoon at most, and instantly reversible
+from one cell in the Sheet if a day isn't going well.
+
+### Adding a photo
+
+1. Get the image file into the `media/` folder in the GitHub repo (ask
+   whoever set up the board if you need a hand with this part — it's a file
+   upload, not a Sheet edit) and note the filename, e.g. `kathy-2024.jpg`.
+2. Add one row to the `Media` tab:
+
+   | File | Caption | Screens |
+   |------|---------|---------|
+   | kathy-2024.jpg | Kathy, your daughter — 2024 | |
+
+   - **File** — just the filename from step 1. (A full `https://` link also
+     works, but see the warning below before using one.)
+   - **Caption** — optional. Keep it warm and orienting — who, and roughly
+     when — never a status or a task. "Kathy, your daughter — 2024" is right;
+     "Call Kathy back" is not; that belongs in NOTES.
+   - **Screens** — leave blank for every screen (the bedroom is *always*
+     excluded regardless, no matter what you type here). To restrict a photo
+     to one display, type its id exactly as it appears in that display's URL
+     — `table` or `living-room` — not the everyday name ("Living Room" with a
+     space will not match anything).
+3. That's it — no redeploy needed for a new photo, just the two steps above.
+   It becomes eligible within about three minutes.
+
+> **A same-origin file in `media/` is strongly preferred over a hosted
+> link.** A Google Drive "share" link can stop working for hotlinking without
+> warning, and this board runs unattended for months — a broken link there
+> just means that one photo quietly never shows again, but it is one more
+> thing that can go wrong for no reason. Keep photos in the repo unless there
+> is a real reason not to.
+
+### Turning it on, and the settings that shape it
+
+| Key | Value |
+|-----|-------|
+| media | on |
+| mediaEveryMin | *(optional — default ~80)* |
+| mediaHoldSec | *(optional — default ~25)* |
+
+- **media** — the master switch. Must be exactly `on`; anything else,
+  including blank, is off. **This is the one-cell "not today" switch** — set
+  it back to blank or anything but `on` and every display stops showing
+  photos within about three minutes, no code, no redeploy.
+- **mediaEveryMin** — roughly how many minutes between moments (a little
+  randomised each time so it doesn't feel mechanical). Never allowed to go
+  below 20 minutes no matter what is typed here, so a typo can't make the
+  board flicker through photos.
+- **mediaHoldSec** — how long a photo stays up before fading back, capped at
+  60 seconds — past that it stops being a "moment" and starts being a
+  takeover, which is what `focus` is for.
+
+### What she never sees
+
+If a photo fails to load — a typo in the filename, a broken link, no
+internet for a moment — the board simply does not show it and quietly tries
+something else next time. Never a broken-image icon, never a blank screen.
+And a moment can never get stuck: it always has an upper bound on how long it
+can possibly stay up, independent of everything else, so even if something
+went wrong the ordinary board is always what comes back.
+
+---
+
+## 6. Publish the script
 
 1. In the Sheet: **Extensions → Apps Script**.
 2. Delete whatever is there, paste all of `apps-script.gs`, **Save**.
@@ -303,6 +399,13 @@ what the URL serves. This catches everyone once.
 > and look for `"focusUntilEpochMs"`: if that word is not in the response, the
 > deployment is still the old version.
 
+> **And the `Media` tab (§5) needs one, once — the first time this board is
+> set up with photo moments in mind.** Until that redeploy `/exec` never
+> mentions `"media"` at all and every row in `Media` is invisible to the
+> board, same safe-and-quiet failure as above. After that one redeploy, a new
+> photo row is a plain Sheet edit — no further redeploys, ever, just for
+> adding photos.
+
 **And then be patient.** After a redeploy, a change can take up to ~10 minutes
 to reach a TV — GitHub Pages caches the page for 10 minutes — plus up to an hour
 for that display's hourly reload. Nothing has failed; it just has not arrived
@@ -311,7 +414,7 @@ within about three minutes with no redeploy at all.)
 
 ---
 
-## 6. One URL per display
+## 7. One URL per display
 
 Bookmark a different URL on each TV so each one identifies itself:
 
@@ -348,7 +451,7 @@ the page at all.
 
 ---
 
-## 7. What the board does when things go wrong
+## 8. What the board does when things go wrong
 
 Designed to be wrong in the safe direction rather than confidently wrong.
 
@@ -374,7 +477,7 @@ still a fact about that date no matter how old the fetch is.
 
 ---
 
-## 8. Refresh behaviour
+## 9. Refresh behaviour
 
 - Sheet is re-read every **3 minutes**, with a cache-busting parameter.
 - The page fully reloads **hourly**, as protection against Silk misbehaving over
@@ -399,6 +502,9 @@ and without waiting for 8pm. Add any of these to that URL:
 | `&nightmsg=…` | try a different night message |
 | `&now=2026-08-15T22:30` | pretend it is this time; the clock runs on from there |
 | `&screen=bedroom` | the display that has a night mode |
+| `&media=on` | turn photo moments on for this preview only |
+| `&photonow=1` | show one right now, instead of waiting out the cadence |
+| `&mediaholdsec=8` | …and hold it for this many seconds instead of the default |
 
 Two examples — the same moment, half past eleven, on the two kinds of screen:
 
@@ -411,7 +517,15 @@ https://gpapciak.github.io/reminders/?demo=1&screen=bedroom&now=2026-08-15T23:30
 ```
 
 `&night=1` forces the dim regardless of the hour, if you would rather not pick
-a time.
+a time. A third example — a photo moment, right now, without waiting an hour
+or touching the Sheet:
+
+```
+https://gpapciak.github.io/reminders/?demo=1&screen=table&media=on&photonow=1
+```
+
+That preview uses a small placeholder graphic (not a real photo) so it works
+with no `Media` tab at all — it exists purely to show the fade and layout.
 
 These only work alongside `demo=1`, so the three bookmarked TV URLs can never
 trip one by accident.

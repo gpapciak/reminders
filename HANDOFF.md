@@ -95,17 +95,23 @@ data a household depends on.
 | `&focusuntil=4:00 pm` | …until this LA time (blank or unparseable = end of day) |
 | `&nightmsg=TEXT` | override the night message |
 | `&now=2026-08-15T22:30` | pretend it is this LA wall-clock time; the clock ticks on from there |
+| `&media=on` / `&media=off` | force the photo-moments master switch |
+| `&mediaeverymin=N` / `&mediaholdsec=N` | override the cadence / hold, still passing through the same clamps |
+| `&photonow=1` | fire one attempt ~50ms after boot, bypassing the WAIT only — every safety check still applies |
 
 Set as a clock *skew*, not a frozen time, so a boundary crossing can be watched
-happening. They are carried across the hourly reload too.
+happening. They are carried across the hourly reload too (`photonow` is not —
+it is a one-shot preview action, not persistent state, so it does not refire
+on the next hourly reload).
 
-### The Sheet (four tabs)
+### The Sheet (five tabs)
 
 | Tab | Shape | Feeds |
 |-----|-------|-------|
 | `Days` | one row per date: `Date, Today, Notes, Reassurance` | TODAY'S ROUTINE, NOTES |
 | `Events` | one row per event: `Date, Description` | CALENDAR |
-| `Settings` | key/value: `standing`, `reassure`, `notes`, `alertAfterMinutes`, `focus`, `focusUntil`, `night`, `nightStart`, `nightEnd` | constants shown every day, plus the two extra display modes |
+| `Media` | one row per photo: `File, Caption, Screens` | occasional photo-moment overlays |
+| `Settings` | key/value: `standing`, `reassure`, `notes`, `alertAfterMinutes`, `focus`, `focusUntil`, `night`, `nightStart`, `nightEnd`, `media`, `mediaEveryMin`, `mediaHoldSec` | constants shown every day, plus the extra display modes |
 | `Status` | written BY the board: `Device, Last seen, Ago, Status` | nothing — it is the heartbeat readout |
 
 Headers are matched by name, so column order is free. Multi-line cells
@@ -423,6 +429,164 @@ the colours differ.
 The test for any future clock-driven behaviour is unchanged: **does it change
 what the board claims, or only how that claim looks?**
 
+## Photo moments
+
+A curated family photo fades in **over** the board, holds for a while, fades
+back — an occasional overlay, not a fifth display mode. Deliberately kept
+outside `selectMode()`/`paint()`: everything in that system answers "what
+does the board currently CLAIM", recomputed on every paint because that
+answer must always be current. A photo claims nothing, so it runs on its own
+timers instead, in `index.html`'s "PHOTO MOMENTS" section.
+
+**Why it exists, and why every default leans conservative.** Added for
+warmth and connection, explicitly *not* to compete with the property doing
+most of the therapeutic work — the board's **constancy**. The person it
+serves recently had a minor ischemic stroke on top of an unassessed cognitive
+condition, which pushes two things toward the conservative end on purpose:
+
+- **Emotional lability** — an evocative image can land harder and faster
+  than expected. Hence: opt-in (off unless `Settings.media` is exactly
+  `"on"`), one cell to kill it instantly with no redeploy, and a caption
+  convention (warmth/orientation only, never a status or instruction) that
+  the code cannot enforce but is written here for whoever edits `Media`.
+- **Fatigue / overstimulation** — hence: still images only, one at a time,
+  muted, a couple of times an afternoon at most, daytime only, and every
+  cadence/hold number clamped so a typo cannot turn "occasional" into
+  "constant".
+
+### The safety model
+
+Four invariants, each with a specific failure it structurally prevents:
+
+1. **A moment always returns to the board.** `PHOTO_HARD_CAP_MS` (90s, fixed
+   — not derived from the current hold setting) is armed the instant
+   anything becomes visible, independent of the normal hold-then-fade path.
+   If that path is ever wrong for any reason, the hard cap tears the overlay
+   down anyway. Verified by *sabotaging* the normal path (clearing the hold
+   timer mid-moment, as if that code had a bug) and confirming the hard cap
+   still recovers the board — the same "prove the backstop works when the
+   primary path doesn't" posture as a focus takeover's until-instant, applied
+   to a timer instead of a clock comparison, because there is no wall-clock
+   deadline to compare against here.
+2. **Never at night, never on the bedroom, never over a focus message.**
+   `contextAllowsPhoto()` is the single gate: checked before starting,
+   checked *again* at the moment of reveal (a preload can take a few
+   seconds — long enough for a focus message to land while waiting), and
+   checked every second via `checkPhotoInterrupt()` (hooked into the same
+   `tick()` that already drives the palette/focus clock checks) while one is
+   showing, so a transition into any of those states mid-moment fades it out
+   immediately. The bedroom exclusion is doubled: `SCREEN!=='bedroom'` is
+   checked inside the gate, **and** the scheduling timer is never even
+   started on the bedroom (`if(SCREEN!=='bedroom') scheduleNextMediaAttempt()`
+   in BOOT) — belt and braces, so the bedroom's minimal night screen never
+   carries so much as a background timer for a feature it can never show.
+   A `Media` row's `Screens` allow-list is filtered through the same
+   exclusion, so `Screens: bedroom` in the Sheet cannot override it either.
+3. **A photo that fails to decode is skipped silently.** Nothing is ever
+   assigned to the real, on-screen `<img>`'s `src` until a hidden `new
+   Image()` preload has already fully decoded (`decode()`, not just
+   `onload` — the difference between "the bytes arrived" and "the browser
+   has actually finished painting it", which matters on a slow connection).
+   A failure records a cooldown timestamp so one dead file stops stealing
+   turns for `MEDIA_FAIL_COOLDOWN_MS` (30 min) without being permanently
+   excluded — a transient network blip should not blacklist a real photo
+   forever.
+4. **Nothing is claimed.** The caption is warmth/orientation text, never a
+   status or instruction — a Sheet-authoring convention, not something the
+   code enforces, documented in `SETUP.md` for whoever edits `Media`. The
+   scheduling itself needs no carve-out the way night/focus did: a photo
+   moment does not assert that anything happened, so there is nothing here
+   for the "nothing is ever inferred from time passing" invariant to
+   conflict with in the first place.
+
+### Scheduling and selection
+
+- Fires roughly every `mediaEveryMin` (default ~80, floor 20 — re-applied
+  *after* jitter so an unlucky low draw can never undercut the safety rail),
+  with ±15% jitter so it doesn't feel mechanical. `mediaHoldSec` (default
+  ~25, floor 5, ceiling 60 — past 60s it stops being a "moment" and starts
+  being a takeover, which is what `focus` is for) is likewise clamped
+  regardless of what is typed.
+- **Shuffle-without-immediate-repeat**, compared by *file*, not object
+  identity — `mediaList` is replaced wholesale by every ~3-minute fetch, so
+  two "the same photo" entries a few minutes apart are different object
+  instances, and an identity check would silently stop noticing repeats.
+  `mediaLastShownFile` is set only by the real reveal path, which is why a
+  test exercising `pickNextPhoto()` in isolation has to mirror that one
+  assignment itself to test the real guarantee (see verification, below) —
+  an easy mistake to make once and worth flagging so it isn't repeated.
+- Eligibility is a single filter: has a `File`, allowed on this screen (blank
+  `Screens` = every non-bedroom screen; a name restricts further; bedroom is
+  excluded regardless), not in cooldown. Empty eligible set → no moment,
+  silently — a valid, common, safe state (no `Media` tab, everything
+  excluded for this screen, everything briefly cooling down).
+
+### Render
+
+`.photo` sits as the last child of `.stage`, `position:absolute;inset:0`,
+opacity-transitioned rather than `[hidden]`-toggled (display cannot
+transition, and a smooth ~1s cross-fade needs the element present at
+opacity:0 throughout). Being out of the flex flow means showing or hiding it
+can never perturb `.grid`'s or `.single`'s own layout — the board keeps
+rendering underneath exactly as it would with the overlay absent, which is
+what lets it fade back to something always *current* rather than something
+frozen at the moment the photo started.
+
+Image: `object-fit:contain` inside a flexible wrapper, centred, never cropped
+— a face must never be cut off by the frame. The letterbox strips
+`contain` leaves are filled by `.photo`'s own `--paper` background, so they
+read as a deliberately framed photo rather than a rendering glitch. Caption:
+a **fixed height budget** (`.photo-cap-box`, mirroring `.single`'s own fixed
+`flex:1 1 auto` sizing), auto-fit via a **generalised `fitMessage()`** —
+the function that already drives the single-message component was
+parameterised to take element ids instead of hardcoded ones, so the caption
+reuses the exact same measured shrink-until-fits algorithm rather than a
+second hand-rolled copy of it, per the spec's own instruction to reuse the
+existing fit machinery.
+
+Palette: day only, by construction rather than by a CSS rule — a photo
+moment is refused entirely while the board is in its night state (invariant
+2 above), so `--paper` always resolves to the warm palette at the moment
+this becomes visible. No night-specific override exists or is needed.
+
+### apps-script.gs
+
+`readMedia(ss, out)` follows the exact tolerant pattern `readEvents()` uses:
+missing tab → one warning, `out.media` stays `[]`, never throws; a row with
+no `File` is silently skipped, same as a malformed `Events` row. **A missing
+or empty `Media` tab is a valid, safe, opt-out state** — no photo moment ever
+fires, which is exactly what an as-yet-uncurated board should do.
+
+`Screens` is split and normalised through a new shared helper,
+`normScreenToken()` — the same character-stripping rule `cleanScreenId()`
+already used for the heartbeat's device id and `index.html`'s own `SCREEN`
+constant, factored out so all three can never drift apart. (`cleanScreenId()`
+now just wraps it with `|| 'unnamed'`, since a device identity must never
+come back blank while a list membership token safely can.) This is why
+`Media`'s `Screens` column expects the canonical id form (`living-room`),
+not the human display name — "Living Room" with a plain space would split
+into two separate, wrong tokens, since a bare space is *also* a valid
+separator between entries.
+
+**Needs one redeploy, once** (Deploy → Manage deployments → edit → New
+version), the same as `focus`/`focusUntil` did. Until then `/exec` never
+mentions `"media"` and every `Media` row is invisible to the board — safe
+and quiet, not broken. After that one redeploy, adding a photo is a plain
+Sheet edit with no further redeploys.
+
+### Demo / test hooks
+
+All under `?demo=1` (see the URL-flags table above): `&media=on`/`off`,
+`&mediaeverymin=`/`&mediaholdsec=` (still clamped — these override the
+*input*, not the safety rail), and `&photonow=1` to fire one attempt
+~50ms after boot rather than waiting out the cadence. `photonow` bypasses
+the **wait**, never the safety checks — exactly like `&focus=` bypasses the
+Sheet edit but not the safety model around it. `DEMO_DATA.media` seeds two
+entries for `?demo=1`: a small placeholder SVG (`media/demo-placeholder.svg`
+— not a photo, exists purely so the demo path exercises the real
+same-origin fetch rather than a mock) and a filename that genuinely does not
+exist, so the failure/skip path is exercised for real too, not simulated.
+
 ## Deliberate departures from BRIEF.md
 
 Each of these was a decision, not an oversight. Do not "restore" them without
@@ -444,7 +608,12 @@ asking.
    is *"have we contacted X yet?"* — a question about the **past**. Recent past
    entries carry a green check, then a TODAY divider, then upcoming. A
    forward-only list cannot answer the question that prompted the column.
-5. **Photos, weather, greeting line — not built.** Deliberately out of scope.
+5. **Photos, weather, greeting line — not built.** Deliberately out of scope
+   at the time. **Photos are now built**, as the occasional overlay in *Photo
+   moments* above, not as a permanent part of the layout — that distinction
+   was deliberate too: the board's constancy is what does most of the
+   reassuring, and a photo is a rare guest on top of it, never a fixture.
+   Weather and a greeting line remain out of scope.
 6. **Night and focus are modes of one board, not separate pages.** Two axes,
    one shared single-message component, one selection function — see above.
    Resist adding a fourth branch; extend an axis instead.
@@ -479,6 +648,13 @@ asking.
 - **Observability never blocks the thing observed.** The heartbeat write is
   skipped — never queued — if another display holds the lock, and every failure
   path in it degrades to a warning. The board gets its data regardless.
+- **A wrong-in-the-safe-direction overlay always has an independent hard
+  backstop.** A focus takeover's until-instant, a photo moment's
+  `PHOTO_HARD_CAP_MS` — both guarantee the board returns to its baseline by a
+  mechanism that does not depend on the "normal" path working correctly. When
+  adding anything else that temporarily covers the board, give it the same
+  property and prove it the same way: deliberately break the normal teardown
+  and confirm the backstop still recovers on its own.
 
 ## The safety model
 
@@ -568,6 +744,40 @@ Apps Script globals):
   response — the board would fall back to cached data over a typo in one cell.
   It degrades to a warning and no takeover, like the heartbeat.
 
+**Verified for photo moments** (54 measured checks in headless Chrome over
+CDP, plus 12 for the endpoint's `readMedia`/`normScreenToken` run under Node
+with stubbed Apps Script globals):
+- A full cycle — fade in, hold, fade out — with the board confirmed intact
+  after: no residual overlay, no lingering `<img src>`, caption box collapsed,
+  every existing card's resolved `--fs` and overflow unchanged.
+- **The hard cap fires even with the normal teardown deliberately sabotaged**
+  mid-moment (its hold timer cleared, simulating a bug in that path) — still
+  showing well past where an unsabotaged cycle is already idle, then torn
+  down anyway once the backstop fires.
+- Suppressed correctly in every documented case: the night window, the
+  bedroom (unconditionally, even when a `Media` row's `Screens` explicitly
+  names it), an active focus message, `media` off, `media` absent (opt-in
+  default), and an eligible set that is empty for the current screen.
+- **Interrupted immediately mid-moment** by a transition into night or by a
+  focus message becoming active — fading within the same second, fully torn
+  down shortly after, in both cases.
+- A failing image (a real same-origin 404, not a mock) is skipped silently:
+  never reaches `showing`, no exception thrown, the board measured intact
+  afterward, and the failure recorded for cooldown de-prioritisation.
+- A deliberately long caption does not clip.
+- `clampMediaEveryMin`/`clampMediaHoldSec` hold their documented floors and
+  ceilings against huge, zero, negative, non-numeric and `undefined` input.
+- Shuffle-without-immediate-repeat verified across 20 consecutive picks from
+  a 2-photo pool; the `Screens` allow-list verified to include/exclude
+  exactly the rows it should for a given screen.
+- The scheduling timer is **never armed at all** on `?screen=bedroom`, and
+  **is** armed on every other screen.
+- Server side: a missing `Media` tab warns once and never throws; a row
+  missing `File` is silently skipped; `Screens` values are split and
+  normalised (`Table, living-room` → `["table","living-room"]`) through the
+  same token rule the heartbeat's device id uses; a bare `https://` URL in
+  `File` passes through verbatim.
+
 **Verified on the actual Fire TV:**
 - The board renders correctly in Silk and fills the screen.
 - **Midnight rollover against the live Sheet** — the date line advanced, the
@@ -589,6 +799,12 @@ Apps Script globals):
   hostile `?screen=`). It cannot record anything until the Apps Script is
   redeployed as a new version AND a `Status` tab exists — until then the board
   runs exactly as before and the response reports `heartbeat: no-tab`.
+- **Photo moments through the live Sheet.** Same story as focus: `readMedia()`
+  is verified directly against a stubbed Sheet, but `/exec` never mentions
+  `"media"` and every `Media` row is invisible to the board until
+  `apps-script.gs` is redeployed as a new version. Until then `mediaList`
+  stays `[]` from a real fetch and the feature is reachable only via
+  `?demo=1`'s hooks — safe and quiet, not broken.
 - **Wake Lock on Silk.** Headless Chrome reports `ACTIVE`, which proves nothing
   about Vega or Fire OS. This ships as an experiment with a visible answer, not
   as a working feature.
@@ -621,6 +837,18 @@ Apps Script globals):
 - Whether 25px routine type is readable from her chair.
 - Whether Silk survives days of uptime. There is an hourly `location.replace()`
   reload as a watchdog, untested over a long run.
+- **Whether an actual photo — a real family JPEG, not the placeholder SVG —
+  decodes and fades cleanly in Silk, and whether repeated decode/discard
+  cycles over days of uptime destabilise it at all.** This is the specific
+  reason v1 is stills only, never video: this is exactly the kind of thing
+  the hourly reload watchdog exists to survive, and a still image is the
+  cheapest possible version of that risk. Nothing about it can be answered
+  headless. Turn it on, add one real photo, and watch the first afternoon.
+- **How a photo actually reads on the table at ~32 inches, and whether the
+  cadence/hold defaults feel right.** Headless proves the mechanics (fades,
+  timing, no clipping); it says nothing about whether ~80 minutes feels rare
+  enough or a photo lands the way it is meant to. Tune `mediaEveryMin` /
+  `mediaHoldSec` in the room, the same way the night palette is being tuned.
 
 ## Open questions
 

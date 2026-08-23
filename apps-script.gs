@@ -32,6 +32,7 @@ function doGet(e) {
     serverLaDate: Utilities.formatDate(now, TZ, 'yyyy-MM-dd'),
     days: {},
     events: [],
+    media: [],
     settings: {},
     /* Focus takeover: the raw message plus the ONE thing the client cannot
        safely work out for itself — when it stops being true, as an absolute
@@ -48,6 +49,7 @@ function doGet(e) {
     var tz = ss.getSpreadsheetTimeZone();
     readDays(ss, tz, out);
     readEvents(ss, tz, out);
+    readMedia(ss, out);
     readSettings(ss, tz, out);
     resolveFocus(out);             /* after settings: it reads focus/focusUntil */
     recordHeartbeat(ss, e, out);   /* after settings: it reads alertAfterMinutes */
@@ -180,6 +182,46 @@ function readEvents(ss, tz, out) {
     var d = cellDate(rows[r], cDate, tz);
     var what = cell(rows[r], cWhat);
     if (d && what) out.events.push({ date: d, what: what });
+  }
+}
+
+/**
+ * "Media" — one row per photo, for the occasional still-image "photo moment"
+ * overlay (see index.html).
+ *   File | Caption | Screens
+ *
+ * File is either a bare filename, resolved by the client against the repo's
+ * /media/ folder, or a full https:// URL used as-is. Caption is optional
+ * warmth/orientation text, never a status or instruction. Screens is an
+ * optional comma/space-separated allow-list of ?screen= ids — blank means
+ * eligible on every daytime screen EXCEPT the bedroom, which the client
+ * excludes unconditionally regardless of what this column says.
+ *
+ * A row with no File is silently skipped, the same tolerant pattern
+ * readEvents() uses for a row missing its date or description: never throws,
+ * never warns per row, just left out. A missing or empty Media tab is a
+ * valid, safe, opt-out state — out.media stays [] and no photo moment ever
+ * fires, which is exactly what an as-yet-uncurated board should do.
+ */
+function readMedia(ss, out) {
+  var sh = sheet(ss, 'Media', out);
+  if (!sh) return;
+  var rows = sh.getDataRange().getValues();
+  if (rows.length < 2) return;
+  var idx = headerIndex(rows[0]);
+  var cFile = col(idx, ['file', 'filename', 'image', 'photo']);
+  var cCaption = col(idx, ['caption', 'captions']);
+  var cScreens = col(idx, ['screens', 'screen']);
+  if (cFile < 0) { out.warnings.push('Media: no "File" column'); return; }
+  for (var r = 1; r < rows.length; r++) {
+    var file = cell(rows[r], cFile);
+    if (!file) continue;
+    var caption = cCaption < 0 ? '' : cell(rows[r], cCaption);
+    var rawScreens = cScreens < 0 ? '' : cell(rows[r], cScreens);
+    var screens = rawScreens.split(/[,\s]+/)
+      .map(normScreenToken)
+      .filter(function (s) { return s.length > 0; });
+    out.media.push({ file: file, caption: caption, screens: screens });
   }
 }
 
@@ -378,17 +420,28 @@ function pad2(n) { return ('0' + n).slice(-2); }
  * degrades to a warning and the caller still gets its data.
  */
 
-/** Untrusted input from a public URL. Sanitised client-side too; done again
- *  here because the client is not the only thing that can call this. Note a
- *  leading "=" cannot survive, so nothing typed into ?screen= can land in the
- *  Sheet as a formula. */
-function cleanScreenId(v) {
-  var s = String(v == null ? '' : v).toLowerCase().trim()
+/** The same "?screen=" -> identifier shape used in three places: the
+ *  heartbeat's device id, index.html's own SCREEN constant, and a Media row's
+ *  Screens allow-list. Kept in one function so all three can never drift out
+ *  of sync with each other — a mismatch here would mean a Screens entry that
+ *  looks right in the Sheet silently never matches any real screen.
+ *  Returns '' on blank input; callers decide what blank means for them. */
+function normScreenToken(v) {
+  return String(v == null ? '' : v).toLowerCase().trim()
     .replace(/[\s_]+/g, '-')
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-{2,}/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return s ? s.slice(0, 24) : 'unnamed';
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 24);
+}
+
+/** Untrusted input from a public URL. Sanitised client-side too; done again
+ *  here because the client is not the only thing that can call this. Note a
+ *  leading "=" cannot survive, so nothing typed into ?screen= can land in the
+ *  Sheet as a formula. Blank normalises to "unnamed" — a device identity, so
+ *  unlike normScreenToken() it must never come back empty. */
+function cleanScreenId(v) {
+  return normScreenToken(v) || 'unnamed';
 }
 
 function recordHeartbeat(ss, e, out) {

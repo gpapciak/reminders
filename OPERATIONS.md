@@ -252,6 +252,17 @@ experiment could reach.
 - Fetch retries every 3 min; recovers on `online` and on `visibilitychange`
   without a reload.
 - Survives network loss without blanking (see the safety model in `HANDOFF.md`).
+- **Photo moments — off by default, and the one piece of this whole board that
+  decodes real image bytes rather than just text.** Everything else here is
+  fetch-and-render-text, which is cheap and has already run unattended for
+  extended periods; a photo moment is a `new Image()` + `decode()` every
+  ~80 minutes it is switched on, which is a new and different kind of load on
+  the browser, however small. This is exactly why it ships stills-only, one
+  at a time, low cadence — the smallest version of that risk — and why video
+  is explicitly deferred (see `HANDOFF.md`). **Unverified over long uptime on
+  real hardware**, same caveat as the hourly-reload watchdog itself: turn it
+  on, add one real photo, and watch how the display behaves over the
+  following days before trusting it as a permanent fixture.
 
 **Note for deploys:** a code change can take up to ~10 minutes to reach a TV
 because of that Pages cache, plus up to an hour for the reload to fire. Not a

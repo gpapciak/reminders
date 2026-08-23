@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600" role="img" aria-label="Placeholder">
+  <!-- Not a real photo. Exists only so ?demo=1 has something that actually
+       decodes, exercising the real same-origin /media/ fetch path end to
+       end (not a mock) without a family photo. Referenced from DEMO_DATA in
+       index.html; never used by the live board. -->
+  <rect width="800" height="600" fill="#f6f2e9"/>
+  <circle cx="400" cy="300" r="170" fill="#e8c896"/>
+  <circle cx="400" cy="300" r="120" fill="#dba85f"/>
+  <circle cx="400" cy="300" r="70" fill="#c0831f"/>
+</svg>

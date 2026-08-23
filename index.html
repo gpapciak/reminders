@@ -142,6 +142,11 @@
        stage must always lay out at exactly 1280x720 and be scaled, never
        resized. */
     flex:0 0 auto;
+    /* position:relative anchors .photo's position:absolute;inset:0 to the
+       1280x720 stage itself, not to #frame (position:fixed) further up —
+       anchoring there would size the overlay against the raw viewport
+       instead of the scaled board underneath it. */
+    position:relative;
     /* --vs is the vertical squeeze, set by fit(): stage height / 720. Silk
        gives us a SHORT viewport, and fixed header/footer/padding would eat
        the cards. Everything vertical scales with it so the squeeze is shared
@@ -280,6 +285,69 @@
     letter-spacing:-1px; overflow-wrap:break-word;
   }
 
+  /* ---- PHOTO MOMENT: an occasional overlay, not a layout mode ----------
+     A curated photo fades in ABOVE the board, holds a while, fades back —
+     see the script for the full safety model (decode-gated, hard capped,
+     interrupted by focus/night). This block is CSS only: how it looks, never
+     when it appears.
+
+     position:absolute;inset:0 takes it out of the flex column entirely, so
+     showing or hiding it can never perturb .grid's or .single's own layout —
+     the board underneath keeps rendering exactly as it would with the
+     overlay absent, which is what lets it fade back to something always
+     current rather than something frozen at the moment the photo started.
+
+     Opacity, not [hidden]/display, and always present in the DOM: display
+     toggling cannot transition, so a smooth ~1s cross-fade needs the element
+     to exist at opacity:0 the whole time and simply move to opacity:1 and
+     back. pointer-events:none while hidden is just hygiene — nothing on this
+     board is clickable, but an invisible full-stage box eating input would be
+     a strange thing to leave unguarded.
+
+     Only ever painted in the DAY palette, by construction rather than by a
+     rule here: a photo moment is refused entirely while the board is in its
+     night state (see contextAllowsPhoto() in the script), so --paper always
+     resolves to the warm palette at the moment this becomes visible. No
+     night-specific override exists or is needed. */
+  .photo{
+    position:absolute; inset:0; z-index:5;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:var(--paper);
+    opacity:0; pointer-events:none;
+    transition:opacity 1s ease;
+    padding:calc(24px*var(--vs)) 48px calc(20px*var(--vs));
+    gap:calc(16px*var(--vs));
+  }
+  .photo.show{ opacity:1; pointer-events:auto; }
+  .photo-img-wrap{
+    flex:1 1 auto; min-height:0; width:100%;
+    display:flex; align-items:center; justify-content:center;
+  }
+  /* object-fit:contain, never cover or a crop — a face must never be cut off
+     by the frame, and the letterbox strips this leaves are filled by .photo's
+     own --paper background, so they read as a deliberately framed photo
+     rather than a rendering glitch. */
+  .photo-img-wrap img{
+    max-width:100%; max-height:100%; display:block;
+    object-fit:contain; border-radius:16px;
+  }
+  /* Caption box: a FIXED height budget (not intrinsic to its text), exactly
+     like .single, so fitMessage() has something stable to measure against
+     regardless of caption length — see fitMessage()'s own comment for why an
+     intrinsic-height box can't be auto-fit this way. Reuses fitMessage()
+     itself (generalised to take element ids rather than hardcoded ones) —
+     the spec asked for the existing fit machinery, not a hand-rolled second
+     copy of it. */
+  .photo-cap-box{
+    flex:0 0 auto; width:100%; height:calc(84px*var(--vs));
+    display:flex; align-items:center; justify-content:center;
+    --fs:32px;                    /* starting value only; fitMessage() owns it */
+  }
+  .photo-cap{
+    flex:0 0 auto; max-width:90%; text-align:center;
+    font-size:var(--fs); font-weight:600; line-height:1.30; color:var(--soft);
+  }
+
   /* ---- ?debug=1 readout ----
      Fixed to the VIEWPORT and deliberately outside .stage: it must never
      enter the stage's flow, its transform, or fitBlock()'s measurements.
@@ -341,6 +409,17 @@
       </div>
 
       <div class="reassure" id="reassure">Everything is okay. You are safe and loved.</div>
+
+      <!-- Photo moment: an occasional overlay above everything else, never a
+           mode of its own. Last child of .stage so it paints on top without
+           needing z-index tricks beyond the belt-and-braces one in the CSS.
+           img has no src until a photo has fully decoded — see beginPhotoMoment
+           in the script. Never a broken-image icon: nothing is ever assigned
+           to src that hasn't already succeeded. -->
+      <div class="photo" id="photo">
+        <div class="photo-img-wrap"><img id="photo-img" alt=""></div>
+        <div class="photo-cap-box" id="photo-cap-box"><div class="photo-cap" id="photo-cap"></div></div>
+      </div>
 
     </div>
   </div>
@@ -464,6 +543,75 @@ const DEFAULT_SCREEN_MODE = { night:true, nightLayout:'full' };
    two modes want opposite things. */
 const MSG_MAX = 160, MSG_MAX_NIGHT = 56, MSG_MIN = 15;
 
+/* ---- PHOTO MOMENTS ---------------------------------------------------
+   Occasional still-image overlays: a curated family photo fades in over the
+   board, holds, fades out. Built to add warmth without spending the board's
+   CONSTANCY — the property doing most of the therapeutic work — so every
+   default here leans calm, low-cadence, and instantly reversible. See
+   HANDOFF.md for the full safety model; this block is just the numbers.
+
+   Context that shaped every default: a recent minor ischemic stroke on top
+   of an unassessed cognitive condition means (a) emotional lability — an
+   evocative image can land harder and faster than expected, so the master
+   switch below must be a one-cell, no-redeploy "bad day" off, and (b)
+   fatigue/overstimulation — hence still images only, muted, low cadence,
+   daytime only, and a caption that never claims anything happened. */
+
+/* The master switch. Opt-IN: absent or anything other than exactly "on"
+   means off. This is deliberate — a feature that can produce a stronger
+   reaction than expected should not turn itself on by a blank cell's
+   default, the way "notes" or "standing" safely can. */
+function mediaEnabled(){
+  return String(settings.media||'').trim().toLowerCase()==='on';
+}
+
+/* Cadence and hold, both overridable via Settings, both CLAMPED so a typo
+   cannot strobe her (too-frequent) or park a photo up semi-permanently
+   (too-long a hold). The clamp is the safety rail; the *_DEFAULT values are
+   just a reasonable starting cadence, tunable freely. */
+const MEDIA_EVERY_MIN_DEFAULT = 80;   // ~75-90 min: a couple of times an afternoon
+const MEDIA_EVERY_MIN_FLOOR   = 20;   // never more often than this, whatever is typed
+const MEDIA_HOLD_SEC_DEFAULT  = 25;
+const MEDIA_HOLD_SEC_FLOOR    = 5;
+const MEDIA_HOLD_SEC_CEILING  = 60;   // beyond this it is not a "moment", it is a takeover
+function clampMediaEveryMin(v){
+  const n=parseFloat(v);
+  const base=(isFinite(n)&&n>0)?n:MEDIA_EVERY_MIN_DEFAULT;
+  return Math.max(MEDIA_EVERY_MIN_FLOOR,base);
+}
+function clampMediaHoldSec(v){
+  const n=parseFloat(v);
+  const base=(isFinite(n)&&n>0)?n:MEDIA_HOLD_SEC_DEFAULT;
+  return Math.min(MEDIA_HOLD_SEC_CEILING,Math.max(MEDIA_HOLD_SEC_FLOOR,base));
+}
+
+const PHOTO_FADE_MS = 1000;           // ~0.8-1.2s asked for; no hard cuts either direction
+/* THE hard cap. Not derived from the current hold setting — a fixed,
+   independent ceiling on purpose, so it stays the last line of defence even
+   if the clamp above were ever wrong. Sized generously above the worst
+   legitimate case (max hold 60s + two ~1s fades + a few seconds of decode
+   slack) so it never fires in normal operation, and unmissably past that
+   case if it ever does: "a photo moment can never get stuck" holds even if
+   every other timer in this file fails simultaneously. */
+const PHOTO_HARD_CAP_MS = 90*1000;
+const PHOTO_DECODE_TIMEOUT_MS = 6*1000;    // preload budget before a "skip silently"
+const MEDIA_FAIL_COOLDOWN_MS = 30*60*1000; // a dead file stops stealing turns for this long
+const PHOTO_CAP_MAX = 32, PHOTO_CAP_MIN = 15;
+
+/* Bare filenames in the Sheet's File column resolve against this — the repo's
+   own /media/ folder, relative to wherever the page itself is served, so it
+   works at gpapciak.github.io/reminders/ or any other path without hardcoding
+   one. A full https:// URL in File bypasses this and is used as-is. */
+const MEDIA_BASE=(function(){
+  return location.pathname.replace(/[^/]*$/,'')+'media/';
+})();
+function mediaUrlFor(file){
+  const f=String(file||'').trim();
+  if(!f) return '';
+  if(/^https?:\/\//i.test(f)) return f;
+  return MEDIA_BASE+encodeURIComponent(f);
+}
+
 /* ---- URL flags and device identity ---------------------------------
    ?demo=1   sample content, no endpoint — layout work only.
    ?debug=1  on-screen diagnostics readout (wake lock, heartbeat, data age).
@@ -489,6 +637,10 @@ const DEBUG = /(^|[?&])debug=1(&|$)/.test(location.search);
      ?demo=1&now=2026-08-15T22:30 pretend it is this LA wall-clock time;
                                   the clock then ticks on from there
      ?demo=1&screen=bedroom       plus the normal per-screen config
+     ?demo=1&media=on             force the master switch on (or off)
+             &mediaeverymin=5     ...and this cadence
+             &mediaholdsec=8      ...and this hold
+             &photonow=1          fire one right now instead of waiting
 
    Gated on DEMO so a bookmarked TV URL can never trip one of them, and so
    nothing here is reachable on the live board by a stray query string. */
@@ -524,6 +676,14 @@ const DEMO_DATA = {
     { date:'2026-08-27', what:'Pest control follow-up' },
     { date:'2026-09-02', what:'2:00 pm  Dental cleaning' },
     { date:'2026-09-17', what:'3:10 pm  Eyehealth NW' },
+  ],
+  /* One real, decodable placeholder (see media/README.md — not a photo) so
+     the demo path exercises the actual same-origin fetch, and one file that
+     genuinely does not exist, so the failure/skip path is exercised for
+     real too rather than simulated. Never reachable outside ?demo=1. */
+  media:[
+    { file:'demo-placeholder.svg', caption:'A demo photo, not a real one', screens:[] },
+    { file:'this-file-does-not-exist.jpg', caption:'', screens:[] },
   ],
 };
 
@@ -657,9 +817,14 @@ function fitLine(el,max,min){
    2. Coarse pass then fine pass. This ceiling is ~6x a card's, so a 1px walk
       from the top would be ~130 reflows on a Fire TV every time the message
       changes; 6px steps down and at most five back up gets the same answer. */
-function fitMessage(max,min){
-  const box=document.getElementById('single');
-  const msg=document.getElementById('single-msg');
+/* Generalised over element ids — the same shape (a flex-centred box with a
+   fixed height budget, holding one flex:0 0 auto text block sized off --fs)
+   also fits the photo caption, so this is called twice rather than copied
+   once. Any future single-centred-block-with-a-height-budget gets this for
+   free too. */
+function fitMessage(boxId,msgId,max,min){
+  const box=document.getElementById(boxId);
+  const msg=document.getElementById(msgId);
   function set(s){ box.style.setProperty('--fs',s+'px'); }
   function fits(){
     return msg.offsetHeight<=box.clientHeight && msg.scrollWidth<=msg.clientWidth+1;
@@ -776,7 +941,7 @@ function renderSingle(text,bottomLine,ceiling){
   const re=document.getElementById('reassure');
   re.hidden=!bottomLine;
   if(bottomLine) re.textContent=bottomLine;
-  fitMessage(ceiling,MSG_MIN);
+  fitMessage('single','single-msg',ceiling,MSG_MIN);
 }
 
 function renderFull(data,todayISO){
@@ -861,6 +1026,18 @@ let focusMsg='';        /* raw text, {days:} not yet expanded               */
 let focusUntilMs=0;     /* absolute instant, resolved by the SERVER         */
 let focusForDate='';    /* the LA date the server resolved it for           */
 
+/* Photo moments. mediaList is undated the same way settings/standing are —
+   there is no expiry model here, just "the current curated list", refreshed
+   every fetch like everything else non-day-specific. */
+let mediaList=[];             /* [{file,caption,screens[]}] from the Sheet   */
+let mediaQueue=[];            /* shuffled remaining picks, no immediate repeat */
+let mediaLastShownFile='';
+let mediaFailedAt={};         /* file -> Date.now() of its last decode failure */
+let photoState='idle';        /* idle | loading | showing | fading-out       */
+let photoLoadToken=0;         /* invalidates a preload that resolves too late */
+let photoTimer=null;          /* the scheduling timer (self-rescheduling)     */
+let photoHoldTimer=null, photoFadeOutTimer=null, photoHardCapTimer=null;
+
 function deviceNow(){ return new Date(Date.now()+clockSkewMs); }
 
 function setFocus(msg,untilMs,forDate){
@@ -874,7 +1051,7 @@ function setFocus(msg,untilMs,forDate){
 
 function save(){
   try{ localStorage.setItem(STORE_KEY,JSON.stringify({d:dayRow,e:events,s:settings,
-       f:{m:focusMsg,u:focusUntilMs,d:focusForDate}})); }
+       f:{m:focusMsg,u:focusUntilMs,d:focusForDate},md:mediaList})); }
   catch(err){}
 }
 function restore(){
@@ -885,6 +1062,7 @@ function restore(){
     if(o.e&&Object.prototype.toString.call(o.e.list)==='[object Array]') events=o.e;
     if(o.s&&typeof o.s==='object') settings=o.s;
     if(o.f&&typeof o.f==='object') setFocus(o.f.m,o.f.u,o.f.d);
+    if(Object.prototype.toString.call(o.md)==='[object Array]') mediaList=o.md;
   }catch(err){}
 }
 
@@ -927,6 +1105,11 @@ function loadData(){
          paint time. Anything missing or malformed arrives as 0 and setFocus()
          turns the whole thing off — a takeover is never the failure mode. */
       setFocus(p.focus,p.focusUntilEpochMs,p.focusForDate);
+      /* Sanitised shape-check only — pickNextPhoto()/screenEligibleForPhoto()
+         already tolerate a malformed entry (missing file, non-array screens),
+         so this just guards against the whole thing not being an array at
+         all (a very old cached response, an endpoint mid-edit). */
+      mediaList=Array.isArray(p.media)?p.media:[];
       hbState=String(p.heartbeat||'?');
       lastOkAt=Date.now(); lastError=null;
       save();
@@ -1087,7 +1270,248 @@ function applyMode(m){
   }
 }
 
-/* 8. PAINT — assemble what to show from whatever state we have */
+/* 8. PHOTO MOMENTS — an occasional overlay, never a mode of selectMode().
+   ------------------------------------------------------------------------
+   Deliberately NOT wired into selectMode()/paint(). Everything else in that
+   system is "what does the board currently CLAIM" — day board, night text,
+   a focus takeover — and selectMode() runs on every paint precisely because
+   those answers must always be current. A photo moment claims nothing; it is
+   a decoration laid OVER whatever the board is currently saying, and it has
+   its own timers because its lifecycle (preload, hold, fade) does not fit
+   the instant-in/instant-out shape paint() already handles well. Keeping it
+   a separate system is what lets it interrupt cleanly without selectMode()
+   ever having to know it exists.
+
+   SAFETY MODEL — read this before changing any timer below.
+   1. A moment always returns to the board. beginPhotoMoment() sets a
+      PHOTO_HARD_CAP_MS backstop the instant anything becomes visible,
+      independent of the normal hold-then-fade path. If the normal path is
+      ever wrong — a bug, a hung transitionend that never fires, anything —
+      the hard cap still tears the overlay down. Same structural guarantee as
+      a focus takeover's until-instant, applied to a timer instead of a clock
+      comparison, because there is no wall-clock deadline to compare against
+      here, only "how long has this been up".
+   2. NEVER during night, NEVER on the bedroom, NEVER over a focus message.
+      contextAllowsPhoto() is the single gate — checked before starting a
+      moment, checked AGAIN at the moment of reveal (a preload can take a few
+      seconds — long enough for a focus message to land while waiting), and
+      checked every second via checkPhotoInterrupt() while one is showing, so
+      a transition into any of those states mid-moment fades it out
+      immediately rather than waiting for it to finish on its own.
+   3. A photo that fails to decode is skipped SILENTLY. No broken-image icon
+      ever reaches the screen, because nothing is ever assigned to the real
+      <img>'s src until a preload has already fully succeeded — see
+      beginPhotoMoment(). The board simply stays exactly as it was.
+   4. The caption asserts nothing. It is warmth/orientation text only
+      ("Kathy, your daughter — 2024"), never a status or instruction — that
+      is a Sheet-authoring convention this code cannot enforce, so it is
+      written here for whoever edits the Media tab. */
+
+/* The master switch is checked fresh every attempt, never cached — that is
+   what makes it a same-fetch, no-redeploy "bad day" off: settings refreshes
+   every ~3 minutes like everything else, and the very next scheduling
+   attempt after it flips to anything but "on" simply does nothing. */
+
+/** Bedroom is excluded unconditionally, REGARDLESS of what a Media row's
+ *  Screens column says — a typo like "Screens: bedroom, table" must not be
+ *  able to put a photo on the one screen this is never allowed to touch. */
+function screenEligibleForPhoto(photo){
+  if(SCREEN==='bedroom') return false;
+  const list=photo&&photo.screens;
+  if(!list||!list.length) return true;      /* blank = eligible everywhere else */
+  return list.indexOf(SCREEN)>=0;
+}
+function eligiblePhotos(){
+  const now=Date.now();
+  return (mediaList||[]).filter(function(p){
+    if(!p||!p.file) return false;
+    if(!screenEligibleForPhoto(p)) return false;
+    /* De-prioritised, not permanently excluded — a network blip should not
+       blacklist a real photo forever, only stop it stealing every turn. */
+    const failedAt=mediaFailedAt[p.file];
+    if(failedAt&&(now-failedAt)<MEDIA_FAIL_COOLDOWN_MS) return false;
+    return true;
+  });
+}
+function shuffleArr(a){
+  const b=a.slice();
+  for(let i=b.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    const t=b[i]; b[i]=b[j]; b[j]=t;
+  }
+  return b;
+}
+/** Shuffle-without-immediate-repeat, soft preference. Compared by FILE, not
+ *  object identity — mediaList is replaced wholesale by every fetch, so two
+ *  "the same photo" entries a few minutes apart are different object
+ *  instances and an identity check would silently stop noticing repeats. */
+function pickNextPhoto(){
+  const pool=eligiblePhotos();
+  if(!pool.length) return null;
+  if(!mediaQueue.length){
+    mediaQueue=shuffleArr(pool);
+    if(mediaQueue.length>1&&mediaQueue[0].file===mediaLastShownFile){
+      const tmp=mediaQueue[0]; mediaQueue[0]=mediaQueue[1]; mediaQueue[1]=tmp;
+    }
+  }
+  /* The pool can have moved since the queue was built (a Sheet edit, a
+     cooldown clearing); drop anything no longer eligible rather than show it. */
+  while(mediaQueue.length){
+    const next=mediaQueue.shift();
+    if(pool.some(function(p){ return p.file===next.file; })) return next;
+  }
+  return null;
+}
+
+/** The one gate. Checked before starting, checked again at reveal, checked
+ *  every second while showing — see the safety model above. */
+function contextAllowsPhoto(now,todayISO){
+  if(SCREEN==='bedroom') return false;
+  if(!mediaEnabled()) return false;
+  if(isNight(now)) return false;
+  if(activeFocus(todayISO,now)) return false;
+  return true;
+}
+
+function scheduleNextMediaAttempt(){
+  if(photoTimer) clearTimeout(photoTimer);
+  const everyMin=clampMediaEveryMin(settings.mediaeverymin);
+  /* +-15% jitter so moments don't feel mechanical; the floor is re-applied
+     AFTER jitter so an unlucky low draw can never undercut the safety rail. */
+  const jitter=1+((Math.random()*2-1)*0.15);
+  const delayMs=Math.max(Math.round(everyMin*60000*jitter),MEDIA_EVERY_MIN_FLOOR*60000);
+  photoTimer=setTimeout(attemptMediaMoment,delayMs);
+}
+function attemptMediaMoment(){
+  scheduleNextMediaAttempt();      /* always line up the NEXT opportunity first, */
+  if(photoState!=='idle') return;  /* whatever this attempt itself does — one moment at a time */
+  const now=deviceNow(), todayISO=isoLA(now);
+  if(!contextAllowsPhoto(now,todayISO)) return;   /* silent — this is a normal, frequent outcome */
+  const photo=pickNextPhoto();
+  if(!photo) return;                              /* no eligible photos right now; also silent */
+  beginPhotoMoment(photo);
+}
+
+/** new Image() + decode(), never the real on-screen <img>, so a failure never
+ *  touches anything visible. Resolves only once the browser has actually
+ *  finished decoding, not merely fetched — decode() is what stands between
+ *  this and a half-painted first frame on a slow connection. */
+function preloadPhoto(url){
+  return new Promise(function(resolve,reject){
+    const img=new Image();
+    let settled=false;
+    const timer=setTimeout(function(){
+      if(settled) return; settled=true; reject(new Error('timeout'));
+    },PHOTO_DECODE_TIMEOUT_MS);
+    function ok(){
+      if(settled) return; settled=true; clearTimeout(timer);
+      if(img.decode){ img.decode().then(function(){ resolve(img); }).catch(function(){ resolve(img); }); }
+      else resolve(img);
+    }
+    function fail(){
+      if(settled) return; settled=true; clearTimeout(timer); reject(new Error('load-error'));
+    }
+    img.onload=ok; img.onerror=fail;
+    img.src=url;
+  });
+}
+
+function beginPhotoMoment(photo){
+  const url=mediaUrlFor(photo.file);
+  if(!url){ return; }
+  photoState='loading';
+  const token=++photoLoadToken;
+  preloadPhoto(url).then(function(img){
+    if(token!==photoLoadToken) return;   /* superseded — an interrupt already reset us */
+    revealPhoto(photo,img);
+  }).catch(function(){
+    if(token!==photoLoadToken) return;
+    /* SKIP SILENTLY. Never a broken-image icon, never a blank board — the
+       board simply stays exactly as it already was. */
+    mediaFailedAt[photo.file]=Date.now();
+    photoState='idle';
+  });
+}
+
+function revealPhoto(photo,img){
+  /* Re-checked here, not just at the decision to start: a preload can take a
+     few seconds, long enough for a focus message to land or the night window
+     to open while this was in flight. */
+  const now=deviceNow(), todayISO=isoLA(now);
+  if(!contextAllowsPhoto(now,todayISO)){ photoState='idle'; return; }
+
+  const photoEl=document.getElementById('photo');
+  const imgEl=document.getElementById('photo-img');
+  const capBox=document.getElementById('photo-cap-box');
+  const capEl=document.getElementById('photo-cap');
+
+  imgEl.src=img.src;         /* already fully decoded — this paint is instant */
+  const caption=String(photo.caption||'').trim();
+  if(caption){
+    setTextWithBreaks(capEl,caption);
+    capBox.style.display='flex';
+    fitMessage('photo-cap-box','photo-cap',PHOTO_CAP_MAX,PHOTO_CAP_MIN);
+  }else{
+    capEl.textContent=''; capBox.style.display='none';
+  }
+
+  mediaLastShownFile=photo.file;
+  photoState='showing';
+  /* Two rAFs, not one: the opacity:0 state needs a full style/layout pass
+     committed before .show is added, or the very first paint can already
+     land mid-transition and the fade reads as a hard cut on a fast machine. */
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      if(photoState==='showing') photoEl.classList.add('show');
+    });
+  });
+
+  const holdMs=clampMediaHoldSec(settings.mediaholdsec)*1000;
+  clearTimeout(photoHoldTimer);
+  photoHoldTimer=setTimeout(beginPhotoFadeOut,holdMs);
+  /* The backstop. Armed the instant anything becomes visible; see the safety
+     model comment above this whole section for why it is independent of the
+     hold timer rather than derived from it. */
+  clearTimeout(photoHardCapTimer);
+  photoHardCapTimer=setTimeout(forceEndPhotoMoment,PHOTO_HARD_CAP_MS);
+}
+
+function beginPhotoFadeOut(){
+  if(photoState!=='showing') return;
+  photoState='fading-out';
+  document.getElementById('photo').classList.remove('show');
+  clearTimeout(photoHoldTimer);
+  clearTimeout(photoFadeOutTimer);
+  photoFadeOutTimer=setTimeout(endPhotoMoment,PHOTO_FADE_MS+250);
+}
+/** The only place that actually tears everything down, reachable from the
+ *  normal path (after the fade completes) OR the hard cap (from ANY state).
+ *  Always leaves the board clean: no lingering src, no stale caption, no
+ *  visible overlay, whatever was interrupted mid-flight. */
+function endPhotoMoment(){
+  photoLoadToken++;      /* invalidates any preload still in flight */
+  clearTimeout(photoHoldTimer); clearTimeout(photoFadeOutTimer); clearTimeout(photoHardCapTimer);
+  photoHoldTimer=photoFadeOutTimer=photoHardCapTimer=null;
+  const photoEl=document.getElementById('photo');
+  photoEl.classList.remove('show');
+  const imgEl=document.getElementById('photo-img');
+  imgEl.removeAttribute('src'); imgEl.src='';
+  document.getElementById('photo-cap').textContent='';
+  document.getElementById('photo-cap-box').style.display='none';
+  photoState='idle';
+}
+function forceEndPhotoMoment(){ endPhotoMoment(); }   /* named for what fired it, under ?debug=1 */
+
+/** Called every second from tick(). A 'loading' moment needs no action here —
+ *  revealPhoto()'s own re-check already refuses to show anything that has
+ *  stopped being allowed while it was decoding — so this only ever acts on
+ *  a moment already on screen. */
+function checkPhotoInterrupt(now,todayISO){
+  if(photoState!=='showing') return;
+  if(!contextAllowsPhoto(now,todayISO)) beginPhotoFadeOut();
+}
+
+/* 9. PAINT — assemble what to show from whatever state we have */
 function paint(){
   const now=deviceNow();
   const todayISO=isoLA(now);
@@ -1140,13 +1564,18 @@ function paint(){
   }
 }
 
-/* 9. CLOCK + date line + mode changes */
+/* 10. CLOCK + date line + mode changes */
 let shownDate=null;
 let shownMode=null;
 function tick(){
   const now=deviceNow();
+  const todayISO=isoLA(now);
   document.getElementById('clock').textContent=fmtTime.format(now);
   const line='Today is '+fmtToday.format(now)+'.';
+  /* Checked every second regardless of which branch below runs — a photo
+     moment interrupt must not wait on the once-a-day date-line branch, and a
+     photo can be showing on any ordinary second. */
+  checkPhotoInterrupt(now,todayISO);
   if(line!==shownDate){                     /* also catches midnight rollover */
     const firstPaint=(shownDate===null);
     shownDate=line;
@@ -1162,11 +1591,11 @@ function tick(){
      the 60-second staleness repaint. Checked every second, repainted only when
      the answer actually changes — a focus message must vanish AT its
      until-time, not up to a minute afterwards, and with no network at all. */
-  const k=modeKey(selectMode(now,isoLA(now)));
+  const k=modeKey(selectMode(now,todayISO));
   if(k!==shownMode) paint();
 }
 
-/* 10. SCREEN WAKE LOCK — an EXPERIMENT, not a fix.
+/* 11. SCREEN WAKE LOCK — an EXPERIMENT, not a fix.
    OPERATIONS.md is explicit that page activity does not keep a Fire TV awake:
    this board already ticks a clock every second, fetches every three minutes
    and reloads hourly, and the 4K Select idled anyway. The sleeping panel is a
@@ -1208,7 +1637,7 @@ function requestWakeLock(){
   }
 }
 
-/* 11. FULLSCREEN — a second EXPERIMENT, this one aimed specifically at
+/* 12. FULLSCREEN — a second EXPERIMENT, this one aimed specifically at
    Silk's own chrome, not at Fire TV sleep.
 
    theme-color (see <head>) asked Silk to TINT its blue navigation bar to match
@@ -1275,7 +1704,7 @@ function requestFullscreenExperiment(){
     });
   });
 
-/* 12. ?debug=1 READOUT — diagnostics for a screen nobody can walk up to. */
+/* 13. ?debug=1 READOUT — diagnostics for a screen nobody can walk up to. */
 let dbgEl=null;
 function shortAgo(ms){
   if(!ms) return 'never';
@@ -1309,14 +1738,17 @@ function debugPaint(){
      here would just be noise on the table or living room. */
   const fsWhy=fsDetail?' ('+fsDetail+')':'';
   const fsLine=fsApplies()?'\nFULL '+fsState+fsWhy+'   drops '+fsDrops:'';
+  /* photoState is not styled to be as terse as the rest of this line \u2014 a dark
+     screen while `photo showing` reads is a plain photo moment, not a fault,
+     and that distinction matters more here than density does. */
   dbgEl.textContent=
     'WAKE '+wakeState+age+why+'   releases '+wakeReleases+fsLine+'\n'+
     SCREEN+'   data '+shortAgo(lastOkAt)+'   beat '+hbState+
-    '   mode '+mode+until+
+    '   mode '+mode+until+'   photo '+photoState+
     '   '+window.innerWidth+'\u00d7'+window.innerHeight;
 }
 
-/* 13. FIT — fill the screen.
+/* 14. FIT — fill the screen.
    Silk on the Fire TV keeps a top navigation bar, so the viewport is
    SHORTER than 720 CSS px. Scaling by min(w/1280, h/720) made height the
    binding constraint, which shrank everything and left black bars down
@@ -1345,7 +1777,7 @@ function fitHeader(){
           Math.round(72*vScale), Math.round(38*vScale));
 }
 
-/* 14. TEST HOOKS — see the flag block at the top. ?demo=1 only.
+/* 15. TEST HOOKS — see the flag block at the top. ?demo=1 only.
    The live board never converts an LA wall-clock time into an instant; the
    server does that, once, for focusUntil. This direction exists only so the
    night boundary and a focus expiry can be driven from a URL. Two passes,
@@ -1387,21 +1819,44 @@ function applyTestHooks(){
     }
     setFocus(f,until,today);                              /* same path as a fetch */
   }
+  /* Photo moments are driven by a cadence measured in tens of minutes and a
+     master switch that defaults off — neither is reachable by hand on a
+     running board, same reasoning as night/focus above. */
+  const mh=paramOf('media'); if(mh) settings.media=mh;             /* 'on' / 'off' */
+  const meh=paramOf('mediaeverymin'); if(meh) settings.mediaeverymin=meh;
+  const mhh=paramOf('mediaholdsec'); if(mhh) settings.mediaholdsec=mhh;
+  /* "Show me one right now" without waiting out the cadence. Still goes
+     through the normal gate (contextAllowsPhoto) — this bypasses the WAIT,
+     not any of the safety checks, exactly like &focus= bypasses the Sheet
+     edit but not the safety model around it. */
+  if(/(^|[?&])photonow=1(&|$)/.test(location.search)){
+    setTimeout(attemptMediaMoment,50);
+  }
 }
 
-/* 15. BOOT */
+/* 16. BOOT */
 /* Which screen this is, onto <html>, before the first paint — the bedroom's
    deeper night palette is a CSS selector on it, so it has to be there before
    anything renders. Never changes afterwards; ?screen= is fixed for the life
    of the page. */
 document.documentElement.setAttribute('data-screen',SCREEN);
 restore();
+/* Demo mode never fetches (loadData() is a no-op under DEMO), so it needs its
+   own seed for the photo pool — otherwise ?demo=1 would have nothing to show
+   and the whole feature would look unbuilt rather than off. After restore(),
+   so a real cached list (if this URL is ever opened without demo) can't leak
+   into a demo session — demo content is always exactly DEMO_DATA. */
+if(DEMO) mediaList=DEMO_DATA.media.slice();
 applyTestHooks();             /* after restore(), so a hook always wins    */
 fit();
 tick();                       /* paints from restored/empty state at once */
 loadData();
 requestWakeLock();
 requestFullscreenExperiment();  /* no-op unless SCREEN==='bedroom'          */
+/* Never on the bedroom — belt and braces alongside contextAllowsPhoto()'s own
+   SCREEN check, and it means the bedroom's minimal night screen never even
+   carries a background timer for a feature it can never show. */
+if(SCREEN!=='bedroom') scheduleNextMediaAttempt();
 debugPaint();
 
 setInterval(tick,1000);       /* live clock + date rollover at midnight   */
@@ -1438,7 +1893,8 @@ function reloadUrl(){
     q.push('demo=1');
     /* Carry the test hooks too, for the same reason: a demo window left open
        overnight must not quietly become a different test an hour later. */
-    ['night','nightmsg','focus','focusuntil','now'].forEach(function(k){
+    ['night','nightmsg','focus','focusuntil','now',
+     'media','mediaeverymin','mediaholdsec'].forEach(function(k){
       const v=paramOf(k);
       if(v) q.push(k+'='+encodeURIComponent(v));
     });
