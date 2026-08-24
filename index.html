@@ -570,7 +570,14 @@ function mediaEnabled(){
    (too-long a hold). The clamp is the safety rail; the *_DEFAULT values are
    just a reasonable starting cadence, tunable freely. */
 const MEDIA_EVERY_MIN_DEFAULT = 80;   // ~75-90 min: a couple of times an afternoon
-const MEDIA_EVERY_MIN_FLOOR   = 20;   // never more often than this, whatever is typed
+/* Lowered from an initial 20 to 10 on request. Still a deliberate rail, not
+   the number itself — the point of a floor is that a fat-fingered "8" typed
+   into mediaEveryMin can't turn "occasional" into "constant"; 10 minutes
+   still comfortably reads as occasional, it is just a tighter occasional
+   than the original guess. Provisional the same way the night numbers are:
+   this is a judgement call, not a measured one, and there is room to move it
+   again either way once it has been watched in the room. */
+const MEDIA_EVERY_MIN_FLOOR   = 10;   // never more often than this, whatever is typed
 const MEDIA_HOLD_SEC_DEFAULT  = 25;
 const MEDIA_HOLD_SEC_FLOOR    = 5;
 const MEDIA_HOLD_SEC_CEILING  = 60;   // beyond this it is not a "moment", it is a takeover

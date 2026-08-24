@@ -501,12 +501,14 @@ Four invariants, each with a specific failure it structurally prevents:
 
 ### Scheduling and selection
 
-- Fires roughly every `mediaEveryMin` (default ~80, floor 20 — re-applied
-  *after* jitter so an unlucky low draw can never undercut the safety rail),
-  with ±15% jitter so it doesn't feel mechanical. `mediaHoldSec` (default
-  ~25, floor 5, ceiling 60 — past 60s it stops being a "moment" and starts
-  being a takeover, which is what `focus` is for) is likewise clamped
-  regardless of what is typed.
+- Fires roughly every `mediaEveryMin` (default ~80, floor **10** — lowered
+  from an initial 20 on request; provisional the same way the night numbers
+  are, a judgement call rather than a measured one — re-applied *after*
+  jitter so an unlucky low draw can never undercut the safety rail), with
+  ±15% jitter so it doesn't feel mechanical. `mediaHoldSec` (default ~25,
+  floor 5, ceiling 60 — past 60s it stops being a "moment" and starts being
+  a takeover, which is what `focus` is for) is likewise clamped regardless
+  of what is typed.
 - **Shuffle-without-immediate-repeat**, compared by *file*, not object
   identity — `mediaList` is replaced wholesale by every ~3-minute fetch, so
   two "the same photo" entries a few minutes apart are different object

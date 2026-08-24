@@ -316,7 +316,7 @@ from one cell in the Sheet if a day isn't going well.
   photos within about three minutes, no code, no redeploy.
 - **mediaEveryMin** — roughly how many minutes between moments (a little
   randomised each time so it doesn't feel mechanical). Never allowed to go
-  below 20 minutes no matter what is typed here, so a typo can't make the
+  below 10 minutes no matter what is typed here, so a typo can't make the
   board flicker through photos.
 - **mediaHoldSec** — how long a photo stays up before fading back, capped at
   60 seconds — past that it stops being a "moment" and starts being a
