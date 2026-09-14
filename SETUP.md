@@ -316,7 +316,7 @@ from one cell in the Sheet if a day isn't going well.
   photos within about three minutes, no code, no redeploy.
 - **mediaEveryMin** — roughly how many minutes between moments (a little
   randomised each time so it doesn't feel mechanical). Never allowed to go
-  below 10 minutes no matter what is typed here, so a typo can't make the
+  below 2 minutes no matter what is typed here, so a typo can't make the
   board flicker through photos.
 - **mediaHoldSec** — how long a photo stays up before fading back, capped at
   60 seconds — past that it stops being a "moment" and starts being a
@@ -438,12 +438,20 @@ Adding `&debug=1` draws a small readout in the bottom-left corner:
 
 ```
 WAKE ACTIVE 6s   releases 0
-table   data 2m   beat ok   1280x650
+table   data 2m   beat ok   mode day full   photo idle   1280x650
+PHOTO idle   next in 7m   every 10m   pool 10/10   last shown fire1.jpg 3m ago
 ```
 
 `WAKE` is the Screen Wake Lock experiment, `data` is how long since the Sheet
 was last read, `beat` is whether the heartbeat recorded. Legible through a Tapo
 camera, which is the point.
+
+The `PHOTO` line is for "why isn't this screen showing photos?": a bracketed
+reason if something is blocking them right now (`[bedroom]`, `[night]`,
+`[media off]`, `[focus]`), when the next try is, how many photos this screen is
+allowed out of how many the Sheet lists, and what the last try did — including
+`FAILED to load <file>` if a photo couldn't be downloaded. The bedroom never
+shows photos, by design, so it always reads `[bedroom] next never`.
 
 It draws over the reassurance line, so prefer running it on the living-room or
 bedroom TV rather than her table display. Without the flag nothing is added to

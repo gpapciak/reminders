@@ -570,14 +570,12 @@ function mediaEnabled(){
    (too-long a hold). The clamp is the safety rail; the *_DEFAULT values are
    just a reasonable starting cadence, tunable freely. */
 const MEDIA_EVERY_MIN_DEFAULT = 80;   // ~75-90 min: a couple of times an afternoon
-/* Lowered from an initial 20 to 10 on request. Still a deliberate rail, not
-   the number itself — the point of a floor is that a fat-fingered "8" typed
-   into mediaEveryMin can't turn "occasional" into "constant"; 10 minutes
-   still comfortably reads as occasional, it is just a tighter occasional
-   than the original guess. Provisional the same way the night numbers are:
-   this is a judgement call, not a measured one, and there is room to move it
-   again either way once it has been watched in the room. */
-const MEDIA_EVERY_MIN_FLOOR   = 10;   // never more often than this, whatever is typed
+/* Lowered 20 -> 10 -> 2 on request. Still a rail, not the number itself: it
+   stops a stray "0" or "0.1" in mediaEveryMin from turning moments into a
+   slideshow. At 2 minutes with a long hold a photo is up a good share of the
+   time, so the cadence is now mostly the Sheet's call, not this floor's.
+   Provisional the same way the night numbers are. */
+const MEDIA_EVERY_MIN_FLOOR   = 2;    // never more often than this, whatever is typed
 const MEDIA_HOLD_SEC_DEFAULT  = 25;
 const MEDIA_HOLD_SEC_FLOOR    = 5;
 const MEDIA_HOLD_SEC_CEILING  = 60;   // beyond this it is not a "moment", it is a takeover
@@ -1043,6 +1041,10 @@ let mediaFailedAt={};         /* file -> Date.now() of its last decode failure *
 let photoState='idle';        /* idle | loading | showing | fading-out       */
 let photoLoadToken=0;         /* invalidates a preload that resolves too late */
 let photoTimer=null;          /* the scheduling timer (self-rescheduling)     */
+let photoArmedEveryMin=0;     /* the cadence photoTimer was armed with        */
+let photoNextAt=0;            /* Date.now() stamp photoTimer will fire at     */
+let photoLast='none yet';     /* last attempt's outcome, for ?debug=1 only    */
+let photoLastAt=0;
 let photoHoldTimer=null, photoFadeOutTimer=null, photoHardCapTimer=null;
 
 function deviceNow(){ return new Date(Date.now()+clockSkewMs); }
@@ -1117,6 +1119,15 @@ function loadData(){
          so this just guards against the whole thing not being an array at
          all (a very old cached response, an endpoint mid-edit). */
       mediaList=Array.isArray(p.media)?p.media:[];
+      /* The timer is armed at boot from whatever settings were cached. A
+         display with no cache (first boot, cleared storage) armed the 80-
+         minute DEFAULT — and the hourly reload always landed first, so that
+         screen never showed a photo at all. Re-arm whenever the fetched
+         cadence differs from the armed one; an unchanged cadence is left
+         alone so every 3-minute fetch doesn't keep pushing the moment back. */
+      if(photoTimer&&clampMediaEveryMin(settings.mediaeverymin)!==photoArmedEveryMin){
+        scheduleNextMediaAttempt();
+      }
       hbState=String(p.heartbeat||'?');
       lastOkAt=Date.now(); lastError=null;
       save();
@@ -1373,12 +1384,18 @@ function pickNextPhoto(){
 /** The one gate. Checked before starting, checked again at reveal, checked
  *  every second while showing — see the safety model above. */
 function contextAllowsPhoto(now,todayISO){
-  if(SCREEN==='bedroom') return false;
-  if(!mediaEnabled()) return false;
-  if(isNight(now)) return false;
-  if(activeFocus(todayISO,now)) return false;
-  return true;
+  return !photoBlockedBy(now,todayISO);
 }
+/** Same checks, named — '' means allowed. Split out so ?debug=1 can say WHY
+ *  a screen isn't showing photos instead of just that it isn't. */
+function photoBlockedBy(now,todayISO){
+  if(SCREEN==='bedroom') return 'bedroom';
+  if(!mediaEnabled()) return 'media off';
+  if(isNight(now)) return 'night';
+  if(activeFocus(todayISO,now)) return 'focus';
+  return '';
+}
+function notePhoto(what){ photoLast=what; photoLastAt=Date.now(); }
 
 function scheduleNextMediaAttempt(){
   if(photoTimer) clearTimeout(photoTimer);
@@ -1387,15 +1404,19 @@ function scheduleNextMediaAttempt(){
      AFTER jitter so an unlucky low draw can never undercut the safety rail. */
   const jitter=1+((Math.random()*2-1)*0.15);
   const delayMs=Math.max(Math.round(everyMin*60000*jitter),MEDIA_EVERY_MIN_FLOOR*60000);
+  photoArmedEveryMin=everyMin;
+  photoNextAt=Date.now()+delayMs;
   photoTimer=setTimeout(attemptMediaMoment,delayMs);
 }
 function attemptMediaMoment(){
   scheduleNextMediaAttempt();      /* always line up the NEXT opportunity first, */
   if(photoState!=='idle') return;  /* whatever this attempt itself does — one moment at a time */
   const now=deviceNow(), todayISO=isoLA(now);
-  if(!contextAllowsPhoto(now,todayISO)) return;   /* silent — this is a normal, frequent outcome */
+  const blocked=photoBlockedBy(now,todayISO);
+  if(blocked){ notePhoto('skipped: '+blocked); return; }   /* silent — a normal, frequent outcome */
   const photo=pickNextPhoto();
-  if(!photo) return;                              /* no eligible photos right now; also silent */
+  if(!photo){ notePhoto('skipped: no eligible photos'); return; }   /* also silent */
+  notePhoto('loading '+photo.file);
   beginPhotoMoment(photo);
 }
 
@@ -1436,6 +1457,7 @@ function beginPhotoMoment(photo){
     /* SKIP SILENTLY. Never a broken-image icon, never a blank board — the
        board simply stays exactly as it already was. */
     mediaFailedAt[photo.file]=Date.now();
+    notePhoto('FAILED to load '+photo.file);
     photoState='idle';
   });
 }
@@ -1445,7 +1467,8 @@ function revealPhoto(photo,img){
      few seconds, long enough for a focus message to land or the night window
      to open while this was in flight. */
   const now=deviceNow(), todayISO=isoLA(now);
-  if(!contextAllowsPhoto(now,todayISO)){ photoState='idle'; return; }
+  const blocked=photoBlockedBy(now,todayISO);
+  if(blocked){ notePhoto('skipped at reveal: '+blocked); photoState='idle'; return; }
 
   const photoEl=document.getElementById('photo');
   const imgEl=document.getElementById('photo-img');
@@ -1463,6 +1486,7 @@ function revealPhoto(photo,img){
   }
 
   mediaLastShownFile=photo.file;
+  notePhoto('shown '+photo.file);
   photoState='showing';
   /* Two rAFs, not one: the opacity:0 state needs a full style/layout pass
      committed before .show is added, or the very first paint can already
@@ -1720,6 +1744,10 @@ function shortAgo(ms){
   const m=Math.round(s/60);
   return m<90 ? m+'m' : Math.round(m/60)+'h';
 }
+function shortIn(ms){
+  const s=Math.max(0,Math.round((ms-Date.now())/1000));
+  return s<90 ? 'in '+s+'s' : 'in '+Math.round(s/60)+'m';
+}
 function debugPaint(){
   if(!DEBUG) return;
   if(!dbgEl){
@@ -1748,11 +1776,21 @@ function debugPaint(){
   /* photoState is not styled to be as terse as the rest of this line \u2014 a dark
      screen while `photo showing` reads is a plain photo moment, not a fault,
      and that distinction matters more here than density does. */
+  /* The photo line answers "why isn't this screen showing photos" on its
+     own: when the next try is, what the last try did, and how many photos
+     this screen is actually allowed. */
+  const nowD=deviceNow();
+  const blockedNow=photoBlockedBy(nowD,isoLA(nowD));
+  const next=photoTimer?shortIn(photoNextAt):'never (not armed)';
+  const photoLine='\nPHOTO '+photoState+(blockedNow?' ['+blockedNow+']':'')+
+    '   next '+next+'   every '+clampMediaEveryMin(settings.mediaeverymin)+'m'+
+    '   pool '+eligiblePhotos().length+'/'+(mediaList||[]).length+
+    '   last '+photoLast+(photoLastAt?' '+shortAgo(photoLastAt)+' ago':'');
   dbgEl.textContent=
     'WAKE '+wakeState+age+why+'   releases '+wakeReleases+fsLine+'\n'+
     SCREEN+'   data '+shortAgo(lastOkAt)+'   beat '+hbState+
     '   mode '+mode+until+'   photo '+photoState+
-    '   '+window.innerWidth+'\u00d7'+window.innerHeight;
+    '   '+window.innerWidth+'\u00d7'+window.innerHeight+photoLine;
 }
 
 /* 14. FIT — fill the screen.

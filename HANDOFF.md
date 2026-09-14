@@ -501,11 +501,17 @@ Four invariants, each with a specific failure it structurally prevents:
 
 ### Scheduling and selection
 
-- Fires roughly every `mediaEveryMin` (default ~80, floor **10** — lowered
-  from an initial 20 on request; provisional the same way the night numbers
+- Fires roughly every `mediaEveryMin` (default ~80, floor **2** — lowered
+  20 → 10 → 2 on request; provisional the same way the night numbers
   are, a judgement call rather than a measured one — re-applied *after*
   jitter so an unlucky low draw can never undercut the safety rail), with
-  ±15% jitter so it doesn't feel mechanical. `mediaHoldSec` (default ~25,
+  ±15% jitter so it doesn't feel mechanical. **The timer is armed at boot
+  from cached settings, then re-armed when a fetch brings a different
+  cadence.** Before that re-arm existed, a display with no localStorage cache
+  armed the 80-minute default, the hourly reload always won the race, and
+  that screen never showed a photo. The same race still applies to any
+  *configured* cadence above ~52 min (60 / 1.15): the reload lands first on
+  every cycle, so such a value means "never" in practice. `mediaHoldSec` (default ~25,
   floor 5, ceiling 60 — past 60s it stops being a "moment" and starts being
   a takeover, which is what `focus` is for) is likewise clamped regardless
   of what is typed.
