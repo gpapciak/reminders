@@ -109,7 +109,6 @@ the deliberate default.
 
 | Key | Value |
 |-----|-------|
-| standing | Feeling hungry? Eat some food. Feeling thirsty? Drink some water. Stay hydrated. |
 | reassure | Everything is okay. You are safe and loved. |
 | notes | Greg is here for {days:2026-08-20}. Then Kathy comes. Then Chris. |
 | alertAfterMinutes | 15 |
@@ -122,14 +121,12 @@ the deliberate default.
 | mediaEveryMin | *(blank — see §5)* |
 | mediaHoldSec | *(blank — see §5)* |
 
-- **standing** — the small grey line under the CALENDAR. Constant, shown every
-  day. Break it across lines with a pipe **or** Alt+Enter inside the cell:
-
-  `Feeling hungry? Eat some food.|Feeling thirsty? Drink some water. Stay hydrated.`
-
-  A semicolon does **not** work here. `Settings` values are read whole, unlike
-  the `Days` columns where a semicolon starts a new item.
-- **reassure** — the big line across the bottom.
+- **standing** — no longer shown (removed 2026-09-14 so the calendar could
+  show more upcoming events). A leftover row does nothing and can be deleted.
+- **reassure** — the big line across the bottom. Break it across lines with a
+  pipe **or** Alt+Enter inside the cell; a semicolon does **not** work here.
+  `Settings` values are read whole, unlike the `Days` columns where a
+  semicolon starts a new item.
 - **notes** — a note shown *every* day, below whatever is in today's `Days` row.
   Use it for things that stay true for weeks, so you type them once instead of
   copying them into every row.
@@ -240,7 +237,7 @@ text, no white or blue. What differs is what each one shows once dimmed:
   evening, make `nightStart` earlier; that is a Sheet edit, no code involved.
 - `night` is the bedroom's message only. The other screens show their usual
   board when they dim, so there is nothing extra to write for them.
-- A **pipe** `|` (or Alt+Enter) forces a line break, same as the standing prompt.
+- A **pipe** `|` (or Alt+Enter) forces a line break, same as in `Settings` values.
 - Keep it true at *any* hour of the night, and keep it kind. It has to work at
   2am and at 5am with nobody there to explain it, so it should never say morning
   is close.
@@ -450,8 +447,9 @@ The `PHOTO` line is for "why isn't this screen showing photos?": a bracketed
 reason if something is blocking them right now (`[night]`, `[media off]`,
 `[focus]`), when the next try is, how many photos this screen is
 allowed out of how many the Sheet lists, and what the last try did — including
-`FAILED to load <file>` if a photo couldn't be downloaded. The bedroom shows
-photos in day mode only, so from 8pm to 6am it reads `[night]`.
+`FAILED to load <file>` if a photo couldn't be downloaded. The table and
+living room show photos day and night; the bedroom only in day mode, so from
+8pm to 6am it reads `[night]`.
 
 It draws over the reassurance line, so prefer running it on the living-room or
 bedroom TV rather than her table display. Without the flag nothing is added to
@@ -468,7 +466,7 @@ Designed to be wrong in the safe direction rather than confidently wrong.
 | Fetch fails (wifi, Google down) | The last good data stays up. After 25 minutes the bottom line quietly adds `· Updated 3:56 PM`. |
 | Fetch keeps failing past midnight | TODAY and NOTES empty themselves, because they belonged to yesterday. **The calendar stays** — every entry carries its own date, so it is still correct. |
 | No `Days` row for today | "Nothing planned today." The calendar still shows. |
-| Sheet unreachable from a cold start | Date, time, the standing prompt and the reassurance line — all of which are true regardless. |
+| Sheet unreachable from a cold start | Date, time and the reassurance line — all of which are true regardless. |
 | A tab or column is missing | That section is empty; the rest works. The response includes a `warnings` list you can see by opening the `/exec` URL in a browser. |
 | No `Status` tab, or two displays writing at once | The heartbeat is skipped for that request and noted in the response. The board still gets its data — observability never blocks the thing being observed. |
 | The Fire TV's clock is wrong | The board uses the server's clock for the displayed time, which day to show, when night starts, and when a takeover ends. |

@@ -128,18 +128,25 @@ Today is Sunday, August 9.                            1:49 PM
 │ 3. Reading     7. Biking   │  TODAY ──────────────────   │
 │ 4. Rest        8. Dinner   │    Tomorrow    1:30 Dentist │
 ├────────────────────────────┤    Wed, Aug 19 Kathy arrives│
-│ NOTES AND MESSAGES         │    Thu, Sep 17 Eyehealth NW │
-│ Greg is here for 11 more   │  ─────────────────────────  │
-│ days. Then Kathy comes.    │  Feeling hungry? Eat some…  │
+│ Greg is here for 11 more   │    Thu, Sep 17 Eyehealth NW │
+│ days. Then Kathy comes.    │    Fri, Sep 25 Haircut      │
+│ KEEP YOUR PHONE WITH YOU.  │    Mon, Sep 28 Retina NW    │
 └────────────────────────────┴─────────────────────────────┘
         Everything is okay. You are safe and loved.
 ```
 
 Left column ~56%, right ~44% — the calendar's entries are mostly short, so the
-width went to the routine and notes. The standing prompt sits under the CALENDAR
-and shares that card's height, so the two trade off against each other directly;
-it is pinned to the card's bottom edge so leftover height falls above it rather
-than pooling underneath.
+width went to the routine and notes.
+
+**Rebalanced 2026-09-14, on Greg's read of how the board is used: the notes get
+read, the routine mostly doesn't.** The standing prompt under the CALENDAR was
+removed and its height turned into rows (`TOTAL_MAX` 10 → 13, the most that
+costs no type size at 1280×650). NOTES lost its title. The routine gave up 10%
+of its height (`ROUTINE_SPLIT`, 6/4 → 54/46 for a long list) and 10% of its
+type (`ROUTINE_MAX.many` 28, from the 31px the real 8-item list resolved to),
+and NOTES' ceiling rose to 40 so its extra height becomes bigger type. Measured
+with the live Sheet at 1280×650: routine 31→28px, notes 22→31px, calendar
+unchanged at 17px with 11 upcoming rows instead of 8.
 
 The calendar is **height**-bound, not width-bound. Narrowing the date column
 buys nothing — measured across four ratios, the resolved type size did not move.
@@ -468,18 +475,19 @@ Four invariants, each with a specific failure it structurally prevents:
    primary path doesn't" posture as a focus takeover's until-instant, applied
    to a timer instead of a clock comparison, because there is no wall-clock
    deadline to compare against here.
-2. **Never at night, never over a focus message.**
+2. **Never over a focus message; at night only where the screen allows it.**
    `contextAllowsPhoto()` is the single gate: checked before starting,
    checked *again* at the moment of reveal (a preload can take a few
    seconds — long enough for a focus message to land while waiting), and
    checked every second via `checkPhotoInterrupt()` (hooked into the same
    `tick()` that already drives the palette/focus clock checks) while one is
    showing, so a transition into any of those states mid-moment fades it out
-   immediately. **The bedroom used to be excluded outright; since 2026-09-14
-   it gets photos in day mode only**, at Greg's request. Its protection is
-   now the night gate alone — the bedroom has `night:true` in `SCREEN_MODES`,
-   so from `nightStart` to `nightEnd` a photo is refused, and one already up
-   at the boundary fades within a second. A blank `Screens` cell includes the
+   immediately. **Since 2026-09-14, at Greg's request, the table and living
+   room show photos at night too** (`nightPhotos:true` in `SCREEN_MODES`;
+   the overlay then paints on the night palette's dark ground). **The bedroom
+   has `nightPhotos:false`**: it was once excluded outright, now gets photos
+   in day mode only — from `nightStart` to `nightEnd` a photo is refused, and
+   one already up at the boundary fades within a second. A blank `Screens` cell includes the
    bedroom; list screens explicitly to keep a photo out of it.
 3. **A photo that fails to decode is skipped silently.** Nothing is ever
    assigned to the real, on-screen `<img>`'s `src` until a hidden `new

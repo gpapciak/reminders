@@ -183,25 +183,15 @@
     padding:calc(14px*var(--vs)) 24px calc(16px*var(--vs)); display:flex; flex-direction:column;
     min-height:0; overflow:hidden;
   }
-  /* 5/4 measured as the best split once the standing prompt is in: TODAY
-     gives up 3px (38->35) and NOTES recovers its full 27px ceiling. Going
-     further costs TODAY with nothing left to gain. */
-  #card-today{ flex:5 1 0; }
-  #card-notes{ flex:4 1 0; }
+  /* Starting split only; renderFull() sets the real one (ROUTINE_SPLIT). */
+  #card-today{ flex:1 1 0; }
+  #card-notes{ flex:1 1 0; }
   #card-cal  { flex:1 1 0; }
   .cap{ flex:0 0 auto; font-size:calc(21px*var(--vs)); font-weight:800; letter-spacing:2.5px;
         color:var(--muted); margin-bottom:calc(10px*var(--vs)); }
-  /* Flex column so the standing prompt can be pinned to the bottom. Auto-fit
-     stops as soon as content fits, so there is always up to one step's worth of
-     leftover height — on a short viewport (the Fire TV) that step is a bigger
-     share of the card and the slack was pooling BELOW the prompt, reading as
-     dead space. Pinned, the slack falls between the last entry and the hairline
-     instead, where it looks like deliberate separation. */
   .body{ flex:1 1 auto; min-height:0; overflow:hidden;
          display:flex; flex-direction:column; }
   .body > *{ flex:0 0 auto; }          /* never compress; let auto-fit decide */
-  #card-cal .cal{ margin-bottom:calc(var(--fs)*0.45); }   /* minimum gap */
-  #card-cal .standing{ margin-top:auto; }                 /* absorbs the slack */
 
   /* ---- TODAY ---- */
   #card-today{ --fs:44px; }
@@ -221,22 +211,6 @@
   #card-notes{ --fs:27px; }
   .notes{ list-style:none; display:flex; flex-direction:column; gap:calc(var(--fs)*0.45); }
   .notes li{ font-size:var(--fs); font-weight:600; line-height:1.30; }
-
-  /* Standing prompt: always true, never from the Sheet's daily row. Sits at
-     the foot of the CALENDAR, held apart by a hairline so a constant is never
-     mistaken for a dated entry. Sized RELATIVE to its card so it shrinks with
-     everything else — fixed px outside the measured area is how it silently
-     overflowed and crushed its neighbour once already.
-
-     1.10 measured as free: it holds the prompt at 23px while the calendar sits
-     at 21px, which is exactly where a 1.00 ratio leaves it. Higher ratios cost
-     the calendar a point for almost nothing. */
-  .standing{
-    flex:0 0 auto;
-    margin-top:calc(var(--fs)*0.45); padding-top:calc(var(--fs)*0.45);
-    border-top:1px solid var(--line);
-    font-size:calc(var(--fs)*1.10); font-weight:600; line-height:1.35; color:var(--muted);
-  }
 
   /* ---- CALENDAR: past (✓) → TODAY → upcoming ---- */
   #card-cal{ --fs:26px; }
@@ -304,11 +278,10 @@
      board is clickable, but an invisible full-stage box eating input would be
      a strange thing to leave unguarded.
 
-     Only ever painted in the DAY palette, by construction rather than by a
-     rule here: a photo moment is refused entirely while the board is in its
-     night state (see contextAllowsPhoto() in the script), so --paper always
-     resolves to the warm palette at the moment this becomes visible. No
-     night-specific override exists or is needed. */
+     Painted in whichever palette is current: the table and living room show
+     photos at night too, so --paper and --soft resolve to the night tokens
+     then and the photo sits on the dark ground. The bedroom never shows one
+     at night (see photoBlockedBy() in the script). */
   .photo{
     position:absolute; inset:0; z-index:5;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -385,8 +358,9 @@
             <div class="cap">TODAY'S ROUTINE</div>
             <div class="body"><ul class="today-list" id="today-list"></ul></div>
           </div>
+          <!-- No title: the notes read as notes without one, and they are the
+               part she actually uses, so the line goes to them instead. -->
           <div class="card" id="card-notes">
-            <div class="cap">NOTES AND MESSAGES</div>
             <div class="body"><ul class="notes" id="notes"></ul></div>
           </div>
         </div>
@@ -395,7 +369,6 @@
             <div class="cap">CALENDAR</div>
             <div class="body">
               <ul class="cal" id="cal"></ul>
-              <div class="standing" id="standing"></div>
             </div>
           </div>
         </div>
@@ -433,7 +406,7 @@
    The Sheet has three tabs:
      "Days"     one row per date   -> TODAY items, NOTES, reassurance
      "Events"   one row per event  -> CALENDAR   (Date | Description)
-     "Settings" key/value          -> standing prompt, defaults
+     "Settings" key/value          -> reassurance line, modes, defaults
 
    Calendar entries carry ONLY a date and a description. Whether
    something has already happened is computed from today's LA date,
@@ -449,8 +422,6 @@ const STORE_KEY     = 'momboard.v1';
 
 /* Safe constants. These are always true, so they survive a dead network
    and the board is never bare. The Settings tab can override them. */
-const DEFAULT_STANDING =
-  'Feeling hungry? Eat some food. Feeling thirsty? Drink some water. Stay hydrated.';
 const DEFAULT_REASSURE = 'Everything is okay. You are safe and loved.';
 
 /* Night's own safe constant. Shown if the Sheet has no "night" key, if the
@@ -509,12 +480,15 @@ const NIGHT_END_MIN   =  6*60;   /* 6:00 am */
    Note the bedroom is enabled here but no bedroom display exists yet; the
    stick is not installed. Its first real night is still a supervised event —
    see HANDOFF.md. */
+/* nightPhotos: may photo moments run while this screen is in night mode?
+   The living areas yes (Greg, 2026-09-14); the bedroom never, so its dark
+   screen stays dark. */
 const SCREEN_MODES = {
-  'bedroom':     { night:true, nightLayout:'single' },
-  'table':       { night:true, nightLayout:'full'   },
-  'living-room': { night:true, nightLayout:'full'   }
+  'bedroom':     { night:true, nightLayout:'single', nightPhotos:false },
+  'table':       { night:true, nightLayout:'full',   nightPhotos:true  },
+  'living-room': { night:true, nightLayout:'full',   nightPhotos:true  }
 };
-const DEFAULT_SCREEN_MODE = { night:true, nightLayout:'full' };
+const DEFAULT_SCREEN_MODE = { night:true, nightLayout:'full', nightPhotos:true };
 
 /* Ceiling and floor for the single-message type. The floor is the same 15px
    the cards use, and it is a floor for the same reason: nothing may ever clip,
@@ -668,7 +642,6 @@ const SCREEN=(function(){
 const DEMO_DATA = {
   today:[ 'Researching care options','OnPoint Credit Union','Best Buy','Gratitude' ],
   notes:[ 'Greg is here for {days:2026-08-20}. Then Kathy comes. Then Chris.' ],
-  standing: DEFAULT_STANDING,
   reassure: DEFAULT_REASSURE,
   calendar:[
     { date:'2026-08-04', what:'Saw Dr. Amal' },
@@ -697,8 +670,7 @@ const DEMO_DATA = {
    presented as though it were current. Dated events are different —
    they are self-validating, so they survive (see paint()). */
 function safeFallback(){
-  return { today:[], notes:[], calendar:[],
-           standing:DEFAULT_STANDING, reassure:DEFAULT_REASSURE };
+  return { today:[], notes:[], calendar:[], reassure:DEFAULT_REASSURE };
 }
 
 /* 2. TIME — always America/Los_Angeles (Mom's timezone) */
@@ -844,15 +816,10 @@ function fitMessage(boxId,msgId,max,min){
 
 /* Pick a window around today so the column never overflows: recent past
    above the divider, upcoming below, backfilling whichever side is short. */
-/* Ten entries is the priority; the calendar gives up type size to hold them.
-   The standing prompt shares this card, so the two trade off point for point —
-   its ratio below is set to keep it near its target while the calendar shrinks.
-   Dropped entries are always the furthest-future ones, which reappear as they
-   approach. Past entries are never trimmed first — they are what answers
-   "have we contacted X yet?". */
-/* Ten entries is the priority; the calendar gives up type size to hold them.
-   The standing prompt shares this card, so the two trade off point for point.
-   Dropped entries are always the furthest-future ones, which reappear as they
+/* Thirteen entries is the priority; the calendar gives up type size to hold
+   them. Was ten, with a standing prompt under the list; the prompt was removed
+   on request (2026-09-14) and its height went to three more rows (13 measured
+   as the most that costs no type size at 1280x650). Dropped entries are always the furthest-future ones, which reappear as they
    approach. Past entries are never trimmed first — they are what answers
    "have we contacted X yet?".
 
@@ -861,7 +828,17 @@ function fitMessage(boxId,msgId,max,min){
    that point "what is coming" matters more than a long tail of confirmations,
    and the recent past is still represented. When the future is thin the past
    expands to fill the column instead, so the card is never half empty. */
-const PAST_MAX=4, PAST_MAX_BUSY=2, BUSY_AHEAD=8, TOTAL_MAX=10;
+const PAST_MAX=4, PAST_MAX_BUSY=2, BUSY_AHEAD=8, TOTAL_MAX=13;
+
+/* Left column: type ceilings, and the routine card's share (of 100) of the
+   column height. On request (2026-09-14) the routine gave up 10% of its type
+   and 10% of its height to NOTES, which gets read while the routine mostly
+   doesn't. Was a 44px ceiling for both and a 6/4 (long list) or 5/4 (short
+   list) split. The long-list ceiling is 90% of the 31px the real 8-item
+   routine resolved to before; the short-list one is 90% of the old 44. NOTES'
+   ceiling went up so the height it gained turns into bigger type. */
+const ROUTINE_MAX={ many:28, few:40 }, NOTES_MAX=40;
+const ROUTINE_SPLIT={ many:54, few:50 };
 function calendarWindow(items, todayISO){
   const clean=(items||[])
     .filter(e=>e&&isoToUTCDate(e.date)&&String(e.what||'').trim())
@@ -969,11 +946,9 @@ function renderFull(data,todayISO){
      stable for as long as the shape of the day's list is. */
   const many=items.length>6;
   tl.classList.toggle('two',many);
-  /* Measured with the real ten-item list. 6/4 gives 25px TODAY and 23px NOTES;
-     7/3 buys TODAY 30px but drops NOTES to 18px and the standing prompt to 14,
-     which is too small to read across a room. */
-  document.getElementById('card-today').style.flex=many?'6 1 0':'5 1 0';
-  document.getElementById('card-notes').style.flex=many?'4 1 0':'4 1 0';
+  const share=many?ROUTINE_SPLIT.many:ROUTINE_SPLIT.few;
+  document.getElementById('card-today').style.flex=share+' 1 0';
+  document.getElementById('card-notes').style.flex=(100-share)+' 1 0';
   if(!items.length){ tl.appendChild(emptyRow('Nothing planned today.')); }
   items.forEach((t,i)=>{
     const li=document.createElement('li');
@@ -986,12 +961,6 @@ function renderFull(data,todayISO){
   const notes=(data.notes||[]).map(n=>String(n||'').trim()).filter(Boolean);
   if(!notes.length){ nl.appendChild(emptyRow('No notes today.')); }
   notes.forEach(n=>{ const li=document.createElement('li'); setTextWithBreaks(li,n); nl.appendChild(li); });
-
-  /* Reserve no space at all when there is no standing prompt. */
-  const st=document.getElementById('standing');
-  const standing=String(data.standing||'').trim();
-  setTextWithBreaks(st,standing);
-  st.style.display=standing?'block':'none';
 
   const cal=document.getElementById('cal'); cal.innerHTML='';
   const win=calendarWindow(data.calendar,todayISO);
@@ -1008,8 +977,8 @@ function renderFull(data,todayISO){
   document.getElementById('reassure').textContent =
     data.reassure || 'Everything is okay. You are safe and loved.';
 
-  fitBlock('card-today',44,15);
-  fitBlock('card-notes',27,15);
+  fitBlock('card-today',many?ROUTINE_MAX.many:ROUTINE_MAX.few,15);
+  fitBlock('card-notes',NOTES_MAX,15);
   fitBlock('card-cal',  26,14);
 }
 
@@ -1021,7 +990,7 @@ function renderFull(data,todayISO){
               undated things expire, dated things don't. */
 let dayRow=null;      /* { forDate, at, today[], notes[], reassure }        */
 let events=null;      /* { at, list[] }                                     */
-let settings={};      /* { standing, reassure, notes, night, nightstart… }  */
+let settings={};      /* { reassure, notes, night, nightstart… }     */
 let clockSkewMs=0;    /* server time - device time; Fire TV clocks drift    */
 let inFlight=false, lastOkAt=0, lastError=null, hbState='?';
 
@@ -1031,7 +1000,7 @@ let focusMsg='';        /* raw text, {days:} not yet expanded               */
 let focusUntilMs=0;     /* absolute instant, resolved by the SERVER         */
 let focusForDate='';    /* the LA date the server resolved it for           */
 
-/* Photo moments. mediaList is undated the same way settings/standing are —
+/* Photo moments. mediaList is undated the same way settings are —
    there is no expiry model here, just "the current curated list", refreshed
    every fetch like everything else non-day-specific. */
 let mediaList=[];             /* [{file,caption,screens[]}] from the Sheet   */
@@ -1309,9 +1278,9 @@ function applyMode(m){
       a focus takeover's until-instant, applied to a timer instead of a clock
       comparison, because there is no wall-clock deadline to compare against
       here, only "how long has this been up".
-   2. NEVER during night, NEVER over a focus message. (The bedroom was once
-      excluded outright; it now gets photos in day mode only, on request —
-      the night gate below is what keeps its dark screen dark.)
+   2. NEVER over a focus message, and NEVER on a screen in night mode unless
+      its SCREEN_MODES entry has nightPhotos:true (table and living room do;
+      the bedroom does not, so its dark screen stays dark).
       contextAllowsPhoto() is the single gate — checked before starting a
       moment, checked AGAIN at the moment of reveal (a preload can take a few
       seconds — long enough for a focus message to land while waiting), and
@@ -1391,7 +1360,7 @@ function contextAllowsPhoto(now,todayISO){
  *  a screen isn't showing photos instead of just that it isn't. */
 function photoBlockedBy(now,todayISO){
   if(!mediaEnabled()) return 'media off';
-  if(isNight(now)) return 'night';
+  if(isNight(now)&&!screenMode().nightPhotos) return 'night';
   if(activeFocus(todayISO,now)) return 'focus';
   return '';
 }
@@ -1550,12 +1519,11 @@ function paint(){
 
   if(DEMO){
     model.today=DEMO_DATA.today; model.notes=DEMO_DATA.notes;
-    model.calendar=DEMO_DATA.calendar; model.standing=DEMO_DATA.standing;
+    model.calendar=DEMO_DATA.calendar;
     model.reassure=DEMO_DATA.reassure;
   }else{
     /* Dated events survive regardless of the day row's age. */
     if(events&&events.list) model.calendar=events.list;
-    model.standing=settings.standing||DEFAULT_STANDING;
     model.reassure=settings.reassure||DEFAULT_REASSURE;
 
     /* The day row is only usable if it is actually for TODAY. At midnight
@@ -1572,8 +1540,6 @@ function paint(){
 
   model.today=expandList(model.today,todayISO);
   model.notes=expandList(model.notes,todayISO);
-  const st=expandDays(model.standing,todayISO);
-  model.standing=st.expired?'':st.text;
 
   /* Say so quietly when the data has stopped arriving. One line, no alarm,
      and only once it is old enough to matter. */
