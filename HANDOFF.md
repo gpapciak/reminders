@@ -468,20 +468,19 @@ Four invariants, each with a specific failure it structurally prevents:
    primary path doesn't" posture as a focus takeover's until-instant, applied
    to a timer instead of a clock comparison, because there is no wall-clock
    deadline to compare against here.
-2. **Never at night, never on the bedroom, never over a focus message.**
+2. **Never at night, never over a focus message.**
    `contextAllowsPhoto()` is the single gate: checked before starting,
    checked *again* at the moment of reveal (a preload can take a few
    seconds — long enough for a focus message to land while waiting), and
    checked every second via `checkPhotoInterrupt()` (hooked into the same
    `tick()` that already drives the palette/focus clock checks) while one is
    showing, so a transition into any of those states mid-moment fades it out
-   immediately. The bedroom exclusion is doubled: `SCREEN!=='bedroom'` is
-   checked inside the gate, **and** the scheduling timer is never even
-   started on the bedroom (`if(SCREEN!=='bedroom') scheduleNextMediaAttempt()`
-   in BOOT) — belt and braces, so the bedroom's minimal night screen never
-   carries so much as a background timer for a feature it can never show.
-   A `Media` row's `Screens` allow-list is filtered through the same
-   exclusion, so `Screens: bedroom` in the Sheet cannot override it either.
+   immediately. **The bedroom used to be excluded outright; since 2026-09-14
+   it gets photos in day mode only**, at Greg's request. Its protection is
+   now the night gate alone — the bedroom has `night:true` in `SCREEN_MODES`,
+   so from `nightStart` to `nightEnd` a photo is refused, and one already up
+   at the boundary fades within a second. A blank `Screens` cell includes the
+   bedroom; list screens explicitly to keep a photo out of it.
 3. **A photo that fails to decode is skipped silently.** Nothing is ever
    assigned to the real, on-screen `<img>`'s `src` until a hidden `new
    Image()` preload has already fully decoded (`decode()`, not just
@@ -762,9 +761,8 @@ with stubbed Apps Script globals):
   mid-moment (its hold timer cleared, simulating a bug in that path) — still
   showing well past where an unsabotaged cycle is already idle, then torn
   down anyway once the backstop fires.
-- Suppressed correctly in every documented case: the night window, the
-  bedroom (unconditionally, even when a `Media` row's `Screens` explicitly
-  names it), an active focus message, `media` off, `media` absent (opt-in
+- Suppressed correctly in every documented case: the night window, an
+  active focus message, `media` off, `media` absent (opt-in
   default), and an eligible set that is empty for the current screen.
 - **Interrupted immediately mid-moment** by a transition into night or by a
   focus message becoming active — fading within the same second, fully torn
@@ -778,8 +776,9 @@ with stubbed Apps Script globals):
 - Shuffle-without-immediate-repeat verified across 20 consecutive picks from
   a 2-photo pool; the `Screens` allow-list verified to include/exclude
   exactly the rows it should for a given screen.
-- The scheduling timer is **never armed at all** on `?screen=bedroom`, and
-  **is** armed on every other screen.
+- (Superseded 2026-09-14: the bedroom now arms the timer like every other
+  screen and is gated by night mode only — verified day shows, night refuses,
+  and a photo up at the night boundary fades.)
 - Server side: a missing `Media` tab warns once and never throws; a row
   missing `File` is silently skipped; `Screens` values are split and
   normalised (`Table, living-room` → `["table","living-room"]`) through the

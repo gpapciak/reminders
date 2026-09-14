@@ -447,11 +447,11 @@ was last read, `beat` is whether the heartbeat recorded. Legible through a Tapo
 camera, which is the point.
 
 The `PHOTO` line is for "why isn't this screen showing photos?": a bracketed
-reason if something is blocking them right now (`[bedroom]`, `[night]`,
-`[media off]`, `[focus]`), when the next try is, how many photos this screen is
+reason if something is blocking them right now (`[night]`, `[media off]`,
+`[focus]`), when the next try is, how many photos this screen is
 allowed out of how many the Sheet lists, and what the last try did — including
-`FAILED to load <file>` if a photo couldn't be downloaded. The bedroom never
-shows photos, by design, so it always reads `[bedroom] next never`.
+`FAILED to load <file>` if a photo couldn't be downloaded. The bedroom shows
+photos in day mode only, so from 8pm to 6am it reads `[night]`.
 
 It draws over the reassurance line, so prefer running it on the living-room or
 bedroom TV rather than her table display. Without the flag nothing is added to

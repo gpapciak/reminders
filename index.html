@@ -1309,7 +1309,9 @@ function applyMode(m){
       a focus takeover's until-instant, applied to a timer instead of a clock
       comparison, because there is no wall-clock deadline to compare against
       here, only "how long has this been up".
-   2. NEVER during night, NEVER on the bedroom, NEVER over a focus message.
+   2. NEVER during night, NEVER over a focus message. (The bedroom was once
+      excluded outright; it now gets photos in day mode only, on request —
+      the night gate below is what keeps its dark screen dark.)
       contextAllowsPhoto() is the single gate — checked before starting a
       moment, checked AGAIN at the moment of reveal (a preload can take a few
       seconds — long enough for a focus message to land while waiting), and
@@ -1330,13 +1332,12 @@ function applyMode(m){
    every ~3 minutes like everything else, and the very next scheduling
    attempt after it flips to anything but "on" simply does nothing. */
 
-/** Bedroom is excluded unconditionally, REGARDLESS of what a Media row's
- *  Screens column says — a typo like "Screens: bedroom, table" must not be
- *  able to put a photo on the one screen this is never allowed to touch. */
+/** A Media row's Screens allow-list. Blank means every screen, bedroom
+ *  included — the bedroom's night protection is the time gate in
+ *  photoBlockedBy(), not this list. */
 function screenEligibleForPhoto(photo){
-  if(SCREEN==='bedroom') return false;
   const list=photo&&photo.screens;
-  if(!list||!list.length) return true;      /* blank = eligible everywhere else */
+  if(!list||!list.length) return true;      /* blank = eligible everywhere */
   return list.indexOf(SCREEN)>=0;
 }
 function eligiblePhotos(){
@@ -1389,7 +1390,6 @@ function contextAllowsPhoto(now,todayISO){
 /** Same checks, named — '' means allowed. Split out so ?debug=1 can say WHY
  *  a screen isn't showing photos instead of just that it isn't. */
 function photoBlockedBy(now,todayISO){
-  if(SCREEN==='bedroom') return 'bedroom';
   if(!mediaEnabled()) return 'media off';
   if(isNight(now)) return 'night';
   if(activeFocus(todayISO,now)) return 'focus';
@@ -1898,10 +1898,9 @@ tick();                       /* paints from restored/empty state at once */
 loadData();
 requestWakeLock();
 requestFullscreenExperiment();  /* no-op unless SCREEN==='bedroom'          */
-/* Never on the bedroom — belt and braces alongside contextAllowsPhoto()'s own
-   SCREEN check, and it means the bedroom's minimal night screen never even
-   carries a background timer for a feature it can never show. */
-if(SCREEN!=='bedroom') scheduleNextMediaAttempt();
+/* Every screen, bedroom included. At night the timer still fires but
+   photoBlockedBy() returns 'night' and nothing is shown. */
+scheduleNextMediaAttempt();
 debugPaint();
 
 setInterval(tick,1000);       /* live clock + date rollover at midnight   */
