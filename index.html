@@ -33,7 +33,8 @@
     --mark:#c08a20;                          /* "today" divider       */
     --note-ink:#2b4a66;                      /* numbers / upcoming    */
 
-    /* Kept for the medication card if it ever comes back — see notes. */
+    /* The "recorded" green. Was kept dormant for the removed medication card;
+       now live, as the pressed state of a check-in chip. */
     --ok-bg:#e3f1e4; --ok-ink:#245c33; --ok-edge:#4f9c63;
     --soon-bg:#fbeecf; --soon-ink:#6b4a12; --soon-edge:#d69a2c;
   }
@@ -80,6 +81,17 @@
     --paper:#080603; --card:#0e0b06; --ink:#c0831f;
     --muted:#7a5219; --soft:#9a6a22; --line:#241a10;
     --done:#8a6a2a; --done-ink:#8a6a2a; --mark:#8a6a2a; --note-ink:#b07d29;
+    /* The check-in green, at night. These HAD no night values, which is a real
+       hazard rather than an omission: the day --ok-bg is #e3f1e4, so the first
+       green chip after 8pm would have put a near-WHITE panel on the living
+       room's dark board — precisely what this palette exists to prevent, and it
+       would have appeared for the first time on a day nobody was testing.
+       Green is kept rather than folded into the amber, because the hue IS the
+       meaning here and the palette's stated rule bans white and blue, not
+       colour as such. Luminance is matched to --soft so it reads as "lit, but
+       part of this board". PROVISIONAL, like every other number in this block:
+       it has never been seen on a television in a dark room. */
+    --ok-bg:#0f1509; --ok-ink:#7f9c50; --ok-edge:#3f5226;
   }
 
   /* ---- BEDROOM NIGHT: deeper still ----------------------------------
@@ -279,10 +291,15 @@
      a strange thing to leave unguarded.
 
      Painted in whichever palette is current: the table and living room show
-     photos at night too, so --paper and --soft resolve to the night tokens
-     then and the photo sits on the dark ground. The bedroom never shows one
-     at night (see photoBlockedBy() in the script). */
-  .photo{
+     moments at night too, so --paper and --soft resolve to the night tokens
+     then and the moment sits on the dark ground. The bedroom never shows one
+     at night (see momentBlockedBy() in the script).
+
+     ONE overlay, shared by both kinds of moment: a photo swaps in the image
+     wrap below, a gentle message swaps in the message box. That is not tidiness
+     — it is the whole collision model. Two kinds of thing rotating cannot
+     overlap when there is only one box for them to appear in. */
+  .moment{
     position:absolute; inset:0; z-index:5;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     background:var(--paper);
@@ -291,16 +308,16 @@
     padding:calc(24px*var(--vs)) 48px calc(20px*var(--vs));
     gap:calc(16px*var(--vs));
   }
-  .photo.show{ opacity:1; pointer-events:auto; }
-  .photo-img-wrap{
+  .moment.show{ opacity:1; pointer-events:auto; }
+  .moment-img-wrap{
     flex:1 1 auto; min-height:0; width:100%;
     display:flex; align-items:center; justify-content:center;
   }
   /* object-fit:contain, never cover or a crop — a face must never be cut off
-     by the frame, and the letterbox strips this leaves are filled by .photo's
+     by the frame, and the letterbox strips this leaves are filled by .moment's
      own --paper background, so they read as a deliberately framed photo
      rather than a rendering glitch. */
-  .photo-img-wrap img{
+  .moment-img-wrap img{
     max-width:100%; max-height:100%; display:block;
     object-fit:contain; border-radius:16px;
   }
@@ -321,6 +338,26 @@
     font-size:var(--fs); font-weight:600; line-height:1.30; color:var(--soft);
   }
 
+  /* The other thing that can be in the overlay: a gentle message. Takes the
+     image wrap's place and its flex share, so the auto-fit measures against
+     the same stable box a photo would have had — see fitMessage() for why an
+     intrinsic-height box cannot be fitted this way.
+
+     Set in --ink, not --soft: this is a statement someone typed, not a caption
+     under a photo, and it should read with the same authority a takeover has.
+     It is the SIZE that says "this is a moment, not a takeover" (see
+     GENTLE_MSG_MAX), not a quieter colour — a washed-out message on a board
+     built for failing eyesight would be the wrong economy. */
+  .moment-msg-box{
+    flex:1 1 auto; min-height:0; width:100%;
+    display:flex; align-items:center; justify-content:center;
+    --fs:96px;                    /* starting value only; fitMessage() owns it */
+  }
+  .moment-msg{
+    flex:0 0 auto; max-width:92%; text-align:center;
+    font-size:var(--fs); font-weight:700; line-height:1.18; color:var(--ink);
+  }
+
   /* ---- ?debug=1 readout ----
      Fixed to the VIEWPORT and deliberately outside .stage: it must never
      enter the stage's flow, its transform, or fitBlock()'s measurements.
@@ -333,6 +370,72 @@
     letter-spacing:.4px; padding:9px 13px; border-radius:10px;
     white-space:pre; pointer-events:none;
   }
+
+  /* ---- CHECK-IN CHIPS -------------------------------------------------
+     One row of four, full width, between the board and the reassurance line.
+     Read-only: no click handlers anywhere in the script, no :hover, no
+     :focus, no cursor change. She never touches the TV — the buttons are on
+     her phone, and a chip that looked pressable would be a promise the
+     television cannot keep.
+
+     flex:0 0 auto and every vertical metric scaled by --vs, like everything
+     else in the stage: the strip takes a fixed share of the squeeze rather
+     than being squashed, and what it takes comes out of .grid, which
+     fitBlock() then absorbs as slightly smaller card type. See HANDOFF.md for
+     the measured cost.
+
+     The colours are all existing tokens, so the strip follows the day and
+     night palettes with no rules of its own. */
+  /* EVERY NUMBER IN THIS BLOCK IS A MEASURED BUDGET, NOT A TASTE DECISION.
+     Read HANDOFF.md's "What the strip costs" table before changing any of
+     them. The board at 1280x650 has no spare vertical space at all, and the
+     first design of this strip (caption on its own line, comfortable chips,
+     108px, full board width) drove TODAY'S ROUTINE to its 15px floor AND
+     clipped it, which is invariant 1.
+
+     It now sits INSIDE THE LEFT COLUMN, between the routine and the notes
+     (Greg, 2026-09-15), which changes the geometry in two ways that matter:
+
+       - the calendar is no longer charged for it AT ALL. The right column
+         never sees this element, so card-cal measures exactly as it does with
+         check-ins switched off. The whole cost lands on the left column,
+         where the routine's ceiling came down 10% in the same change to pay
+         for it.
+       - the chips are ~160px wide instead of ~240px. That is why the caption
+         went back ABOVE the row rather than inline beside it: inline, it ate
+         95px of a 673px column — 14% of the width, taken straight out of four
+         already-narrow chips. A line of its own costs ~23px of height and is
+         the cheaper trade here, which is the opposite of the answer when this
+         strip was full width. */
+  .chips{ flex:0 0 auto; display:flex; flex-direction:column;
+          gap:calc(5px*var(--vs)); }
+  .chips-cap{ flex:0 0 auto; font-size:calc(14px*var(--vs)); font-weight:800;
+              letter-spacing:1.6px; color:var(--muted); line-height:1.3;
+              white-space:nowrap; }
+  .chips-row{ display:grid; grid-template-columns:repeat(4,1fr);
+              gap:calc(9px*var(--vs)); }
+  .chip{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:calc(5px*var(--vs)) 10px calc(6px*var(--vs));
+    display:flex; flex-direction:column;
+    min-width:0; overflow:hidden;
+  }
+  /* nowrap + overflow:hidden is what lets fitLine() measure this; the name is
+     then shrunk until it fits rather than being ellipsised. Same contract as
+     the header: the CSS size is a ceiling, nothing is ever cut off. */
+  .chip-name{ font-size:calc(20px*var(--vs)); font-weight:700; color:var(--soft);
+              line-height:1.2; white-space:nowrap; overflow:hidden; }
+  /* min-height, ALWAYS, pressed or not. Without it the strip would be shorter
+     in the morning than in the evening, so .grid would change height as the
+     day went on and fitBlock() would resize all three cards underneath her.
+     A board that silently re-typesets itself when she checks in is a worse
+     failure than a little reserved whitespace. */
+  .chip-when{ font-size:calc(19px*var(--vs)); font-weight:800; line-height:1.2;
+              min-height:calc(23px*var(--vs)); color:var(--muted);
+              font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .chip[data-on="1"]{ background:var(--ok-bg); border-color:var(--ok-edge); }
+  .chip[data-on="1"] .chip-name{ color:var(--ok-ink); }
+  .chip[data-on="1"] .chip-when{ color:var(--ok-ink); }
 
   /* ---- Footer: the reassurance line ---- */
   .reassure{ flex:0 0 auto; text-align:center; font-size:calc(46px*var(--vs)); font-weight:700;
@@ -358,6 +461,18 @@
             <div class="cap">TODAY'S ROUTINE</div>
             <div class="body"><ul class="today-list" id="today-list"></ul></div>
           </div>
+          <!-- Check-in chips, between the routine and the notes. Built from
+               CHECKINS in the script so the labels and the order live in one
+               place; empty until renderChips() runs, and hidden entirely
+               unless Settings.checkins is on.
+
+               Inside the LEFT COLUMN rather than across the whole board, so
+               the calendar is never charged for it — see the CSS above. -->
+          <div class="chips" id="chips" hidden>
+            <div class="chips-cap">TODAY'S CHECK-INS</div>
+            <div class="chips-row" id="chips-row"></div>
+          </div>
+
           <!-- No title: the notes read as notes without one, and they are the
                part she actually uses, so the line goes to them instead. -->
           <div class="card" id="card-notes">
@@ -383,15 +498,23 @@
 
       <div class="reassure" id="reassure">Everything is okay. You are safe and loved.</div>
 
-      <!-- Photo moment: an occasional overlay above everything else, never a
-           mode of its own. Last child of .stage so it paints on top without
-           needing z-index tricks beyond the belt-and-braces one in the CSS.
-           img has no src until a photo has fully decoded — see beginPhotoMoment
-           in the script. Never a broken-image icon: nothing is ever assigned
-           to src that hasn't already succeeded. -->
-      <div class="photo" id="photo">
-        <div class="photo-img-wrap"><img id="photo-img" alt=""></div>
+      <!-- Moment overlay: an occasional thing laid above everything else,
+           never a mode of its own. Last child of .stage so it paints on top
+           without needing z-index tricks beyond the belt-and-braces one in
+           the CSS.
+
+           Two kinds live in here and exactly one is ever visible: a photo
+           (image wrap + caption) or a gentle message (message box). Sharing
+           one overlay is what makes "two things rotating" impossible rather
+           than merely unlikely.
+
+           img has no src until a photo has fully decoded — see
+           beginPhotoMoment in the script. Never a broken-image icon: nothing
+           is ever assigned to src that hasn't already succeeded. -->
+      <div class="moment" id="moment">
+        <div class="moment-img-wrap" id="moment-img-wrap"><img id="photo-img" alt=""></div>
         <div class="photo-cap-box" id="photo-cap-box"><div class="photo-cap" id="photo-cap"></div></div>
+        <div class="moment-msg-box" id="moment-msg-box" hidden><div class="moment-msg" id="moment-msg"></div></div>
       </div>
 
     </div>
@@ -415,6 +538,34 @@
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxWpXuqZTXYxlk1gP8JtvML1tDoajdAK5nckcoO_uLMZlwZr6e8yt7SAt0CzWFEQE2A/exec';
 
 const REFRESH_MS    = 3*60*1000;    /* pull the Sheet every ~3 min      */
+/* The TABLE polls faster, and only the table — see refreshMs(). Check-ins are
+   the reason: she presses a button on her phone, looks up, and a three-minute
+   board has not caught up yet. For a ten-to-fifteen-minute memory window that
+   gap is the difference between "it worked" and "it didn'''t", and she cannot be
+   asked to wait and look again.
+
+   120s, NOT the 60s this started as, and the difference is a measurement.
+   /exec was timed at 4.0-8.5s per call end to end, of which ~0.08s is network
+   — so essentially all of it is Google-side time against a consumer account'''s
+   90-minutes-a-day script runtime cap. The arithmetic:
+
+     today   3 screens @ 180s          = 1,440 calls/day
+     at 60s  table + 2 @ 180s          = 2,400 calls/day   (1.67x)
+     at 120s table + 2 @ 180s          = 1,680 calls/day   (1.17x)
+
+   At anything like the measured per-call cost, 1,440 calls/day is ALREADY in
+   the same order as the cap, and the reason it has not bitten is probably that
+   the Fire TVs sleep (see OPERATIONS.md) rather than that there is headroom.
+   Tripling one screen'''s rate on top of that is not a safe thing to do blind,
+   and the billed number is not visible from outside — it is in Apps Script'''s
+   own Executions view, which is where this decision should be finished.
+
+   So: 120s buys most of the benefit (worst-case staleness 180s -> 120s) for a
+   17% load increase instead of a 67% one. Going to 60s afterwards is editing
+   this one number, once the Executions dashboard has been read. The real fix
+   is cheaper reads — doGet currently getDataRange()s every tab on every call,
+   including Days and Events, which change a few times a week. */
+const REFRESH_MS_FAST = 120*1000;
 const RELOAD_MS     = 60*60*1000;   /* full reload hourly (Silk watchdog)*/
 const FETCH_TIMEOUT = 20*1000;
 const STALE_NOTE_MS = 25*60*1000;   /* quietly show "updated" past this */
@@ -480,15 +631,20 @@ const NIGHT_END_MIN   =  6*60;   /* 6:00 am */
    Note the bedroom is enabled here but no bedroom display exists yet; the
    stick is not installed. Its first real night is still a supervised event —
    see HANDOFF.md. */
-/* nightPhotos: may photo moments run while this screen is in night mode?
+/* nightMoments: may photo moments run while this screen is in night mode?
    The living areas yes (Greg, 2026-09-14); the bedroom never, so its dark
    screen stays dark. */
+/* fastPoll: only the table. It is the screen she ACTIVELY reads and the one
+   she will be standing at just after pressing a button on her phone; the
+   living room is glanced at and the bedroom is not read at all. Scoping it to
+   one screen is also what keeps the endpoint's daily runtime where it was —
+   see the arithmetic in OPERATIONS.md. */
 const SCREEN_MODES = {
-  'bedroom':     { night:true, nightLayout:'single', nightPhotos:false },
-  'table':       { night:true, nightLayout:'full',   nightPhotos:true  },
-  'living-room': { night:true, nightLayout:'full',   nightPhotos:true  }
+  'bedroom':     { night:true, nightLayout:'single', nightMoments:false, fastPoll:false },
+  'table':       { night:true, nightLayout:'full',   nightMoments:true,  fastPoll:true  },
+  'living-room': { night:true, nightLayout:'full',   nightMoments:true,  fastPoll:false }
 };
-const DEFAULT_SCREEN_MODE = { night:true, nightLayout:'full', nightPhotos:true };
+const DEFAULT_SCREEN_MODE = { night:true, nightLayout:'full', nightMoments:true, fastPoll:false };
 
 /* Ceiling and floor for the single-message type. The floor is the same 15px
    the cards use, and it is a floor for the same reason: nothing may ever clip,
@@ -539,6 +695,16 @@ function mediaEnabled(){
   return String(settings.media||'').trim().toLowerCase()==='on';
 }
 
+/* Opt-IN, exactly like media and for the same reason: this one ships dark and
+   is switched on in the Sheet only after it has been seen in the room. Absent
+   or anything other than "on" means off, and off means the strip is not
+   rendered at all — it contributes no height and the three cards measure
+   exactly as they do today. */
+function checkinsEnabled(){
+  if(TEST_CHECKINS) return true;
+  return String(settings.checkins||'').trim().toLowerCase()==='on';
+}
+
 /* Cadence and hold, both overridable via Settings, both CLAMPED so a typo
    cannot strobe her (too-frequent) or park a photo up semi-permanently
    (too-long a hold). The clamp is the safety rail; the *_DEFAULT values are
@@ -564,7 +730,7 @@ function clampMediaHoldSec(v){
   return Math.min(MEDIA_HOLD_SEC_CEILING,Math.max(MEDIA_HOLD_SEC_FLOOR,base));
 }
 
-const PHOTO_FADE_MS = 1000;           // ~0.8-1.2s asked for; no hard cuts either direction
+const MOMENT_FADE_MS = 1000;           // ~0.8-1.2s asked for; no hard cuts either direction
 /* THE hard cap. Not derived from the current hold setting — a fixed,
    independent ceiling on purpose, so it stays the last line of defence even
    if the clamp above were ever wrong. Sized generously above the worst
@@ -572,10 +738,71 @@ const PHOTO_FADE_MS = 1000;           // ~0.8-1.2s asked for; no hard cuts eithe
    slack) so it never fires in normal operation, and unmissably past that
    case if it ever does: "a photo moment can never get stuck" holds even if
    every other timer in this file fails simultaneously. */
-const PHOTO_HARD_CAP_MS = 90*1000;
+const MOMENT_HARD_CAP_MS = 90*1000;
 const PHOTO_DECODE_TIMEOUT_MS = 6*1000;    // preload budget before a "skip silently"
 const MEDIA_FAIL_COOLDOWN_MS = 30*60*1000; // a dead file stops stealing turns for this long
 const PHOTO_CAP_MAX = 32, PHOTO_CAP_MIN = 15;
+
+/* ---- GENTLE MESSAGES -------------------------------------------------
+   The second kind of temporary message, and the COUNTERPART to a focus
+   takeover rather than a variant of it:
+
+     focus   an acute takeover. The board is worth suppressing, so it is
+             suppressed: one sentence, full ceiling, continuously, until its
+             instant. "Greg stepped out, back around 4:00."
+     gentle  the same kind of news when it does NOT warrant suppressing the
+             board. It takes a turn in the rotation instead — fades in over
+             the board for a few seconds every few minutes, then gives the
+             board back.
+
+   Same information, two intensities. Which one to reach for is an authoring
+   decision made in the Sheet; this code does not infer it and must not start
+   to. The SERVER resolves both through identical code (resolveTimedMessages
+   in apps-script.gs), so they expire identically — see activeTimedMsg().
+
+   It rides the MOMENT machinery below, not selectMode(), for exactly the
+   reason a photo does: it claims nothing about what the board IS, it is laid
+   over whatever the board is already saying. That is also the answer to "what
+   if too many things are rotating" — there is one scheduler and one overlay,
+   so a gentle message and a photo cannot overlap. Not unlikely: impossible.
+
+   No master switch, unlike media. The presence of the text IS the switch: a
+   gentle message is typed for a reason, for a bounded window, and it clears
+   itself. A separate on/off cell would be one more thing to leave in the
+   wrong position, and the direction it would fail in is "still showing". */
+const GENTLE_EVERY_MIN_DEFAULT = 15;  // roughly "every time she looks up and wonders"
+/* A rail, not the number itself — same role MEDIA_EVERY_MIN_FLOOR plays, and
+   deliberately the same value: the two kinds of moment share one overlay and
+   one hard cap, so there is no reason one may come round closer together than
+   the other. Low on request (2026-09-15): some circumstances want a much more
+   regular pulse than the 15-minute default, and that call belongs in the
+   Sheet, not here. At 2 minutes with a 20-second hold the message is up
+   roughly a sixth of the time — a lot, which is the point of it being
+   available. What bounds it is gentleUntil, not this floor. */
+const GENTLE_EVERY_MIN_FLOOR   = 2;
+const GENTLE_HOLD_SEC_DEFAULT  = 20;  // read at a glance; shorter than a photo's dwell
+const GENTLE_HOLD_SEC_FLOOR    = 5;
+const GENTLE_HOLD_SEC_CEILING  = 60;  // past this it is not a moment, it is a takeover
+function clampGentleEveryMin(v){
+  const n=parseFloat(v);
+  const base=(isFinite(n)&&n>0)?n:GENTLE_EVERY_MIN_DEFAULT;
+  return Math.max(GENTLE_EVERY_MIN_FLOOR,base);
+}
+function clampGentleHoldSec(v){
+  const n=parseFloat(v);
+  const base=(isFinite(n)&&n>0)?n:GENTLE_HOLD_SEC_DEFAULT;
+  return Math.min(GENTLE_HOLD_SEC_CEILING,Math.max(GENTLE_HOLD_SEC_FLOOR,base));
+}
+/* The shared scheduler ticks at whichever cadence is currently faster, so its
+   floor has to be whichever floor is lower — derived, never a third number to
+   keep in step by hand. */
+const MOMENT_EVERY_MIN_FLOOR = Math.min(MEDIA_EVERY_MIN_FLOOR,GENTLE_EVERY_MIN_FLOOR);
+/* Deliberately below MSG_MAX (160). A takeover wants to be as large as the
+   panel allows, because being unmissable is its whole job; a gentle message
+   wants to be unmistakably readable and then get out of the way. PROVISIONAL
+   in the same way MSG_MAX_NIGHT is: the right number is a thing to look at on
+   the real panel, not to reason out here. */
+const GENTLE_MSG_MAX = 96;
 
 /* Bare filenames in the Sheet's File column resolve against this — the repo's
    own /media/ folder, relative to wherever the page itself is served, so it
@@ -591,6 +818,46 @@ function mediaUrlFor(file){
   return MEDIA_BASE+encodeURIComponent(f);
 }
 
+/* ---- CHECK-INS -------------------------------------------------------
+   She taps one of four buttons on her phone; each tap appends a row to the
+   Sheet's Log tab through the same /exec endpoint. The board reads them back
+   and shows four chips — grey with no time, or green with a checkmark and the
+   recorded time. They clear at midnight.
+
+   WHY THIS DOES NOT BREAK "nothing is ever inferred from time passing".
+   That invariant forbids turning elapsed time into a claim that something
+   happened — which is why routine items are never auto-greyed. This is the
+   exact opposite: it is her own EXPLICIT confirmation, stamped by the server
+   at the moment she made it. The board reports what she said. It never
+   computes what she probably did, and nothing here may ever start to.
+
+   THE CHIPS ARE NOT INTERACTIVE. No click handler is registered anywhere for
+   them, by design — she does not touch the TV, and the board is read-only.
+
+   COPY, and why it is shaped the way it is. The chips carry a CAPTION,
+   "TODAY'S CHECK-INS", and that caption is doing safety work, not decoration.
+   It scopes every chip under it to the RECORD rather than the act: a grey
+   "Morning medicine" means "no check-in recorded", not "you have not taken
+   your medicine". That distinction is the whole reason the caption exists.
+
+   So no chip ever contains:
+     - a negative statement ("not taken", "missed", "due") — if she took the
+       pill and forgot to press, that would be the double-dose risk from
+       BRIEF.md running in reverse, and the board would be causing it;
+     - an instruction ("tap your phone") — an earlier draft had exactly that,
+       and it is wrong for the same reason: "Evening medicine — tap your
+       phone" sitting grey at 9am reads as a prompt to take the evening dose
+       in the morning. Evening medicine grey all morning is NORMAL, and
+       nothing about it may look like a problem.
+   The unpressed state is therefore just the name, in the same muted ink the
+   board uses everywhere else, and it asserts nothing at all. */
+const CHECKINS = [
+  { kind:'medicine-am', name:'Morning medicine' },
+  { kind:'medicine-pm', name:'Evening medicine' },
+  { kind:'shower',      name:'Shower' },
+  { kind:'exercise',    name:'Exercise' }
+];
+
 /* ---- URL flags and device identity ---------------------------------
    ?demo=1   sample content, no endpoint — layout work only.
    ?debug=1  on-screen diagnostics readout (wake lock, heartbeat, data age).
@@ -602,6 +869,16 @@ function paramOf(name){
 }
 const DEMO  = /(^|[?&])demo=1(&|$)/.test(location.search);
 const DEBUG = /(^|[?&])debug=1(&|$)/.test(location.search);
+/* The ONE test flag that is deliberately NOT gated on ?demo=1, because its
+   whole job is to be used on a real board against real data: it lets the strip
+   be seen on the table display, through the camera, before the Sheet is
+   touched and before it goes live for every screen at once. That is safe to
+   leave ungated precisely because the board is read-only — this flag can
+   reveal a display element and nothing else. It cannot write, cannot change
+   what the Sheet says, and cannot make a chip green that is not already green.
+   It is carried across the hourly reload (see reloadUrl); without that the
+   strip would silently vanish an hour into the test. */
+const TEST_CHECKINS = /(^|[?&])checkins=1(&|$)/.test(location.search);
 
 /* ---- Test hooks — ALL require ?demo=1 -------------------------------
    Night and focus are driven by the clock and by the Sheet, so neither is
@@ -620,6 +897,15 @@ const DEBUG = /(^|[?&])debug=1(&|$)/.test(location.search);
              &mediaeverymin=5     ...and this cadence
              &mediaholdsec=8      ...and this hold
              &photonow=1          fire one right now instead of waiting
+     ?checkins=1                  show the check-in strip without editing the
+                                  Sheet. The ONE flag that does not need
+                                  demo=1 — see TEST_CHECKINS for why that is
+                                  safe, and note it survives the hourly reload.
+     ?demo=1&gentle=Back+at+4     a rotating message instead of a takeover
+             &gentleuntil=4:00 pm ...until this LA time  (default: end of day)
+             &gentleeverymin=3    ...coming round this often
+             &gentleholdsec=8     ...and staying this long
+             &gentlenow=1         show it right now instead of waiting
 
    Gated on DEMO so a bookmarked TV URL can never trip one of them, and so
    nothing here is reachable on the live board by a stray query string. */
@@ -663,6 +949,13 @@ const DEMO_DATA = {
     { file:'demo-placeholder.svg', caption:'A demo photo, not a real one', screens:[] },
     { file:'this-file-does-not-exist.jpg', caption:'', screens:[] },
   ],
+  /* Check-ins, as LA minutes-past-midnight rather than instants — they are
+     turned into today's instants at boot, so a demo window is never showing
+     yesterday. Deliberately MIXED: two pressed, two not, which is the state
+     that has to be looked at (all-green and all-grey both hide the contrast
+     the strip depends on), and evening medicine left grey because "grey all
+     morning and that is normal" is the case the copy has to survive. */
+  checkins:{ 'medicine-am':8*60+20, 'shower':10*60+5 },
 };
 
 /* What the board shows when it has nothing trustworthy for today.
@@ -837,7 +1130,12 @@ const PAST_MAX=4, PAST_MAX_BUSY=2, BUSY_AHEAD=8, TOTAL_MAX=13;
    list) split. The long-list ceiling is 90% of the 31px the real 8-item
    routine resolved to before; the short-list one is 90% of the old 44. NOTES'
    ceiling went up so the height it gained turns into bigger type. */
-const ROUTINE_MAX={ many:28, few:40 }, NOTES_MAX=40;
+/* Routine ceilings, down 10% (28 -> 25, 40 -> 36) on request, 2026-09-15, to
+   pay for the check-in strip now sitting in this column. These are CEILINGS,
+   so on a long routine — already fitted well below them — this changes
+   nothing; what it buys is the short-routine case, where the card used to
+   inflate to fill its share and left the strip nothing. */
+const ROUTINE_MAX={ many:25, few:36 }, NOTES_MAX=40;
 const ROUTINE_SPLIT={ many:54, few:50 };
 function calendarWindow(items, todayISO){
   const clean=(items||[])
@@ -908,6 +1206,11 @@ function emptyRow(text){
 function showLayout(which){
   document.getElementById('grid').hidden   = which!=='full';
   document.getElementById('single').hidden = which!=='single';
+  /* The strip belongs to the full board only. A focus takeover and the night
+     message both exist to REPLACE the board with one sentence; a row of chips
+     underneath either of them would be precisely the clutter they are there
+     to remove. renderChips() then decides whether the full board shows it. */
+  document.getElementById('chips').hidden  = which!=='full';
 }
 
 /* The single-message layout — one component, used by BOTH night and focus.
@@ -926,9 +1229,72 @@ function renderSingle(text,bottomLine,ceiling){
   fitMessage('single','single-msg',ceiling,MSG_MIN);
 }
 
+/* Rebuilt on every full paint rather than diffed: four elements, and the
+   board already rebuilds its lists this way. Crucially it runs BEFORE the
+   fitBlock() calls at the end of renderFull(), because the strip's height is
+   subtracted from .grid and the cards must be measured against what is
+   actually left, not against the layout as it was a frame ago. */
+function renderChips(todayISO){
+  const wrap=document.getElementById('chips');
+  if(!checkinsEnabled()){ wrap.hidden=true; return; }
+  wrap.hidden=false;
+  const kinds=todaysCheckIns(todayISO);
+  const row=document.getElementById('chips-row');
+  row.innerHTML='';
+  CHECKINS.forEach(function(c){
+    const at=kinds[c.kind];
+    /* A number, and a sane one. Anything else is treated as not-recorded:
+       showing "Invalid Date" beside her medicine would be worse than showing
+       nothing, and the safe direction here is always grey. */
+    const on=(typeof at==='number')&&isFinite(at)&&at>0;
+
+    const chip=document.createElement('div');
+    chip.className='chip';
+    if(on) chip.setAttribute('data-on','1');
+
+    const name=document.createElement('div');
+    name.className='chip-name'; name.textContent=c.name;
+
+    const when=document.createElement('div');
+    when.className='chip-when';
+    /* No skew added: this is an absolute instant from the server, like
+       focusUntilMs and unlike the local Date.now() stamps. The board formats
+       it with the same fmtTime as the clock in the header, so the time on the
+       chip and the time she is looking at are in the same voice. */
+    when.textContent=on?('\u2713 '+fmtTime.format(new Date(at))):'';
+
+    chip.appendChild(name); chip.appendChild(when); row.appendChild(chip);
+  });
+  /* Fitted as a GROUP, not one at a time, and that is the whole point of
+     doing it by hand here rather than calling fitLine() four times.
+     Independently fitted, "Shower" and "Exercise" sit at the ceiling while
+     "Morning medicine" shrinks to fit its chip — four different type sizes in
+     one row, which reads as broken rather than as fitted. So: walk them all,
+     let the size only ever ratchet DOWN, then put the surviving size on all
+     four. One size for the row, chosen by its longest label.
+
+     Still the same contract as every other box on this board — the CSS size
+     is a ceiling and this only ever shrinks — and it still exists because
+     "nothing is ever clipped" is an invariant rather than a hope. It matters
+     more here than it did when the strip was full width: in the left column a
+     chip is ~160px, not ~240px, so the labels genuinely do not fit at the
+     ceiling and this is load-bearing rather than belt-and-braces. */
+  const max=Math.round(20*vScale), min=Math.round(11*vScale);
+  const names=row.querySelectorAll('.chip-name');
+  let size=max;
+  Array.prototype.forEach.call(names,function(el){
+    el.style.fontSize=size+'px';
+    while(size>min && el.scrollWidth>el.clientWidth){
+      size-=1; el.style.fontSize=size+'px';
+    }
+  });
+  Array.prototype.forEach.call(names,function(el){ el.style.fontSize=size+'px'; });
+}
+
 function renderFull(data,todayISO){
   showLayout('full');
   document.getElementById('reassure').hidden=false;
+  renderChips(todayISO);
   /* TODAY'S ROUTINE — deliberately NOT auto-greyed as the day goes on. We
      don't know that something actually happened, and guessing is how you get a
      wrong answer to "did that happen yet?". It is also not hers to complete:
@@ -943,8 +1309,22 @@ function renderFull(data,todayISO){
   /* A short errand list stays one column and stays large. A long routine list
      splits in two and hands the left column more of the height, since NOTES
      needs far less of it. Both thresholds are content-driven, so the layout is
-     stable for as long as the shape of the day's list is. */
-  const many=items.length>6;
+     stable for as long as the shape of the day's list is.
+
+     THE THRESHOLD MOVED 6 -> 4 (2026-09-15), and it is worth writing down why,
+     because it looks like it should cost type size and it does the opposite.
+     Measured at 1280x650, the single-column path was rendering a FIVE-item
+     routine at 22px and a six-item one at 18px — both below the 25px ceiling
+     two columns can hold, because one tall column has to shrink to fit the
+     card's height while two short ones do not. So "stays one column and stays
+     large" stopped being true somewhere around five items, and nobody had
+     re-measured it since the card's height changed.
+
+     It was found while fitting the check-in strip: at five and six items the
+     left column was so saturated that the strip could not fit at ANY height,
+     not even 30px. Splitting earlier fixes both at once — bigger routine type
+     on those days AND room for the strip. */
+  const many=items.length>4;
   tl.classList.toggle('two',many);
   const share=many?ROUTINE_SPLIT.many:ROUTINE_SPLIT.few;
   document.getElementById('card-today').style.flex=share+' 1 0';
@@ -977,9 +1357,45 @@ function renderFull(data,todayISO){
   document.getElementById('reassure').textContent =
     data.reassure || 'Everything is okay. You are safe and loved.';
 
+  /* THE STRIP YIELDS. Invariant 1 — nothing is ever clipped — outranks the
+     check-in strip, and on this board that is not a theoretical conflict: at
+     the real 1280x650 Silk viewport a ten-item routine has about 50px of
+     slack and the strip wants 54px. Measured, it fits at 8, 10 and 12 items
+     and does NOT fit at 6 (the single-column `few` path is tighter than it
+     looks) or at 15.
+
+     So the strip is fitted like everything else here: it is a ceiling, and it
+     steps down — to zero, which is the only step it has. Cards first, strip
+     only if what is left over allows it.
+
+     This is deliberately NOT a viewport threshold or an item-count rule. Both
+     would be a guess about content nobody has typed yet, and the board's whole
+     layout posture is to measure the actual boxes rather than predict them.
+     The cost is honest and is written down in HANDOFF.md: on some days the
+     strip is there and on some days it is not, which is exactly why the
+     placement is still an open question rather than a settled one. */
+  let clipped=fitCards(many);
+  const chipsEl=document.getElementById('chips');
+  chipsDropped=false;
+  if(clipped&&!chipsEl.hidden){
+    chipsEl.hidden=true;
+    chipsDropped=true;
+    clipped=fitCards(many);      /* re-fit against the space just given back */
+  }
+}
+
+/** True if this card's content still overflows after auto-fit — i.e. it hit
+ *  its floor and something is being cut off. */
+function cardClips(id){
+  const b=document.getElementById(id).querySelector('.body');
+  return b.scrollHeight>b.clientHeight+1;
+}
+/** Fit all three cards; returns whether any of them still clips. */
+function fitCards(many){
   fitBlock('card-today',many?ROUTINE_MAX.many:ROUTINE_MAX.few,15);
   fitBlock('card-notes',NOTES_MAX,15);
   fitBlock('card-cal',  26,14);
+  return cardClips('card-today')||cardClips('card-notes')||cardClips('card-cal');
 }
 
 /* 5. STATE
@@ -989,16 +1405,37 @@ function renderFull(data,todayISO){
               stale or missing. This split is the whole safety model:
               undated things expire, dated things don't. */
 let dayRow=null;      /* { forDate, at, today[], notes[], reassure }        */
+/* Check-ins are DAY-SCOPED, so this is shaped exactly like dayRow and guarded
+   exactly like it: a forDate that must equal today or the whole block is
+   ignored. That guard is the single most important line in this feature. A
+   display that lost its network overnight must wake up showing four grey
+   chips, because the alternative — yesterday's green "Morning medicine 8:20
+   AM" still sitting there this morning — tells her she has taken a pill she
+   has not taken. The server independently refuses to send anything but today's
+   rows (readLog), so it takes two separate failures to produce that, not one. */
+let logRow=null;      /* { forDate, at, kinds:{kind:epochMs} }               */
+/* Set by renderFull() when the strip had to yield to the cards. Diagnostic
+   only — nothing reads it but ?debug=1, and it exists because "the strip is
+   missing" and "the strip was dropped so the routine would not clip" look
+   identical on screen and are completely different problems. */
+let chipsDropped=false;
 let events=null;      /* { at, list[] }                                     */
 let settings={};      /* { reassure, notes, night, nightstart… }     */
 let clockSkewMs=0;    /* server time - device time; Fire TV clocks drift    */
 let inFlight=false, lastOkAt=0, lastError=null, hbState='?';
 
-/* Focus: an acute, TIME-BOUNDED takeover. Cached like everything else, which
-   is only safe because it carries an absolute instant — see activeFocus(). */
+/* The two TIME-BOUNDED messages. Identical shape, identical expiry rules
+   (activeTimedMsg), cached like everything else — which is only safe because
+   each carries an absolute instant. They are held in separate variables
+   rather than one slot because they can be authored independently and only
+   one of them suppresses the board.
+     focus   an acute takeover — selectMode() switches the whole board to it
+     gentle  a rotating moment — the overlay shows it a few seconds at a time
+   See the GENTLE MESSAGES block above for why they are two things. */
 let focusMsg='';        /* raw text, {days:} not yet expanded               */
 let focusUntilMs=0;     /* absolute instant, resolved by the SERVER         */
 let focusForDate='';    /* the LA date the server resolved it for           */
+let gentleMsg='', gentleUntilMs=0, gentleForDate='';
 
 /* Photo moments. mediaList is undated the same way settings are —
    there is no expiry model here, just "the current curated list", refreshed
@@ -1007,29 +1444,63 @@ let mediaList=[];             /* [{file,caption,screens[]}] from the Sheet   */
 let mediaQueue=[];            /* shuffled remaining picks, no immediate repeat */
 let mediaLastShownFile='';
 let mediaFailedAt={};         /* file -> Date.now() of its last decode failure */
-let photoState='idle';        /* idle | loading | showing | fading-out       */
+let momentState='idle';        /* idle | loading | showing | fading-out       */
+let momentKind='';            /* what is in the overlay: '' | photo | gentle  */
+/* Each kind of moment keeps its OWN due-time; the shared scheduler ticks at
+   whichever cadence is faster and hands each slot to whatever is due. Two
+   clocks, one timer — see attemptMoment(). Both start at 0, i.e. due at the
+   very first slot, which is what makes the no-gentle-message case behave
+   exactly as it did before any of this existed. */
+let photoDueAt=0, gentleDueAt=0;
 let photoLoadToken=0;         /* invalidates a preload that resolves too late */
-let photoTimer=null;          /* the scheduling timer (self-rescheduling)     */
-let photoArmedEveryMin=0;     /* the cadence photoTimer was armed with        */
-let photoNextAt=0;            /* Date.now() stamp photoTimer will fire at     */
-let photoLast='none yet';     /* last attempt's outcome, for ?debug=1 only    */
-let photoLastAt=0;
-let photoHoldTimer=null, photoFadeOutTimer=null, photoHardCapTimer=null;
+let momentTimer=null;          /* the scheduling timer (self-rescheduling)     */
+let momentArmedEveryMin=0;     /* the cadence momentTimer was armed with        */
+let momentNextAt=0;            /* Date.now() stamp momentTimer will fire at     */
+let momentLast='none yet';     /* last attempt's outcome, for ?debug=1 only    */
+let momentLastAt=0;
+let momentHoldTimer=null, momentFadeOutTimer=null, momentHardCapTimer=null;
 
 function deviceNow(){ return new Date(Date.now()+clockSkewMs); }
+function refreshMs(){ return screenMode().fastPoll?REFRESH_MS_FAST:REFRESH_MS; }
 
-function setFocus(msg,untilMs,forDate){
+/** All-or-nothing, like setFocus(): without the date the block cannot be
+ *  expired, so a block with no date is not kept at all. */
+function setLog(kinds,forDate){
+  const d=String(forDate||'').trim();
+  if(!d){ logRow=null; return; }
+  logRow={ forDate:d, at:Date.now(),
+           kinds:(kinds&&typeof kinds==='object')?kinds:{} };
+}
+/** The only way anything reads a check-in. Returns {} unless the stored block
+ *  is for TODAY — so midnight empties the strip with no fetch and no network,
+ *  the same way it empties the day row. */
+function todaysCheckIns(todayISO){
+  return (logRow&&logRow.forDate===todayISO)?(logRow.kinds||{}):{};
+}
+
+/** All three or none. A message with no instant is not a timed message — it
+ *  is a stuck one waiting to happen — so the whole thing is dropped rather
+ *  than half-kept. One function, because this is the rule that makes either
+ *  message safe to cache and there must not be two versions of it. */
+function timedMsg(msg,untilMs,forDate){
   const m=String(msg==null?'':msg).trim();
   const u=(typeof untilMs==='number'&&isFinite(untilMs))?untilMs:0;
-  /* All three or none. A message with no instant is not a focus message —
-     it is a stuck one waiting to happen. */
-  if(!m||u<=0){ focusMsg=''; focusUntilMs=0; focusForDate=''; return; }
-  focusMsg=m; focusUntilMs=u; focusForDate=String(forDate||'');
+  if(!m||u<=0) return {m:'',u:0,d:''};
+  return {m:m,u:u,d:String(forDate||'')};
+}
+function setFocus(msg,untilMs,forDate){
+  const t=timedMsg(msg,untilMs,forDate);
+  focusMsg=t.m; focusUntilMs=t.u; focusForDate=t.d;
+}
+function setGentle(msg,untilMs,forDate){
+  const t=timedMsg(msg,untilMs,forDate);
+  gentleMsg=t.m; gentleUntilMs=t.u; gentleForDate=t.d;
 }
 
 function save(){
   try{ localStorage.setItem(STORE_KEY,JSON.stringify({d:dayRow,e:events,s:settings,
-       f:{m:focusMsg,u:focusUntilMs,d:focusForDate},md:mediaList})); }
+       f:{m:focusMsg,u:focusUntilMs,d:focusForDate},
+       g:{m:gentleMsg,u:gentleUntilMs,d:gentleForDate},l:logRow,md:mediaList})); }
   catch(err){}
 }
 function restore(){
@@ -1037,9 +1508,17 @@ function restore(){
     const raw=localStorage.getItem(STORE_KEY); if(!raw) return;
     const o=JSON.parse(raw)||{};
     if(o.d&&o.d.forDate) dayRow=o.d;
+    /* No STORE_KEY bump needed for this addition, and it is worth saying why
+       rather than leaving the next person to work it out: restore() guards
+       every field INDEPENDENTLY, so a store written by an older build simply
+       has no `l` and logRow stays null — which renders as four grey chips, the
+       correct empty state. An older build reading a newer store ignores `l`
+       the same way. Neither direction can produce a wrong chip. */
+    if(o.l&&o.l.forDate) logRow=o.l;
     if(o.e&&Object.prototype.toString.call(o.e.list)==='[object Array]') events=o.e;
     if(o.s&&typeof o.s==='object') settings=o.s;
     if(o.f&&typeof o.f==='object') setFocus(o.f.m,o.f.u,o.f.d);
+    if(o.g&&typeof o.g==='object') setGentle(o.g.m,o.g.u,o.g.d);
     if(Object.prototype.toString.call(o.md)==='[object Array]') mediaList=o.md;
   }catch(err){}
 }
@@ -1083,6 +1562,12 @@ function loadData(){
          paint time. Anything missing or malformed arrives as 0 and setFocus()
          turns the whole thing off — a takeover is never the failure mode. */
       setFocus(p.focus,p.focusUntilEpochMs,p.focusForDate);
+      setGentle(p.gentle,p.gentleUntilEpochMs,p.gentleForDate);
+      /* Both halves from the server, never synthesised here: the date the
+         block is FOR comes from the endpoint's own LA clock, so a drifting
+         Fire TV cannot widen its own idea of "today" and keep a chip green
+         past midnight. A response with no logForDate clears the block. */
+      setLog(p.log,p.logForDate);
       /* Sanitised shape-check only — pickNextPhoto()/screenEligibleForPhoto()
          already tolerate a malformed entry (missing file, non-array screens),
          so this just guards against the whole thing not being an array at
@@ -1094,8 +1579,13 @@ function loadData(){
          screen never showed a photo at all. Re-arm whenever the fetched
          cadence differs from the armed one; an unchanged cadence is left
          alone so every 3-minute fetch doesn't keep pushing the moment back. */
-      if(photoTimer&&clampMediaEveryMin(settings.mediaeverymin)!==photoArmedEveryMin){
-        scheduleNextMediaAttempt();
+      /* momentEveryMin(), not the media cadence alone: a gentle message that
+         has just ARRIVED is the sharpest case of this bug. Without the re-arm
+         a board sitting on an 80-minute photo timer would not show a message
+         someone typed a minute ago for over an hour — by which time it may
+         already have expired. */
+      if(momentTimer&&momentEveryMin()!==momentArmedEveryMin){
+        scheduleNextMomentAttempt();
       }
       hbState=String(p.heartbeat||'?');
       lastOkAt=Date.now(); lastError=null;
@@ -1176,26 +1666,42 @@ function isNight(now){
   return !!cfg.night&&inNightWindow(now,nightWindowFor(cfg));
 }
 
-/* The focus safety model, in one function.
-   Returns the text to take over with, or '' for "no takeover, carry on". */
-function activeFocus(todayISO,now){
-  if(!focusMsg||!(focusUntilMs>0)) return '';
+/* The timed-message safety model, in ONE function, for BOTH messages.
+   Returns the text to show, or '' for "nothing to say, carry on".
+
+   Shared on purpose. A gentle message needs these guards MORE than a focus
+   takeover does, not less: a wrong takeover is at least sitting in front of
+   whoever next walks into the room, while a wrong gentle message fades itself
+   back in every few minutes, mostly when nobody is watching. Two copies of
+   this would be two places for that to drift. */
+function activeTimedMsg(msg,untilMs,forDate,todayISO,now){
+  if(!msg||!(untilMs>0)) return '';
   /* Two guards, and they fail in the same direction — off.
-     - The ABSOLUTE instant is what makes a cached focus message safe to keep:
-       a bare "4:00 pm" re-read against tomorrow would resurrect a stale
-       takeover, an instant cannot. It also needs no network to expire, and
+     - The ABSOLUTE instant is what makes a cached message safe to keep: a
+       bare "4:00 pm" re-read against tomorrow would resurrect a stale
+       message, an instant cannot. It also needs no network to expire, and
        it is compared HERE, at paint time, not once when the data arrived.
      - The date it was resolved for caps it at that day even if a nonsense
        number somehow got through, so "Greg is gone until 4:00" can never
        still be on the screen at 9pm, let alone tomorrow. */
-  if(focusForDate&&focusForDate!==todayISO) return '';
-  if(now.getTime()>=focusUntilMs) return '';
-  /* {days:} works in a takeover too. Note this does NOT use expandList's
-     drop-the-whole-line-if-expired rule: this message is dated by its
-     until-instant, so it does not need the countdown to date it, and
-     suppressing an acute message over one stale token would be the wrong
-     failure. Only an expansion to nothing means there is nothing to say. */
-  return expandDays(focusMsg,todayISO).text;
+  if(forDate&&forDate!==todayISO) return '';
+  if(now.getTime()>=untilMs) return '';
+  /* {days:} works in either message. Note this does NOT use expandList's
+     drop-the-whole-line-if-expired rule: these messages are dated by their
+     until-instant, so they do not need the countdown to date them, and
+     suppressing one over a single stale token would be the wrong failure.
+     Only an expansion to nothing means there is nothing to say. */
+  return expandDays(msg,todayISO).text;
+}
+/** The takeover. '' means "no takeover, render the board". */
+function activeFocus(todayISO,now){
+  return activeTimedMsg(focusMsg,focusUntilMs,focusForDate,todayISO,now);
+}
+/** The rotating one. '' means "nothing for the rotation to show". Note this
+ *  says nothing about whether a moment may run right now — that is
+ *  momentBlockedBy()'s job, and a focus takeover suppresses this too. */
+function activeGentle(todayISO,now){
+  return activeTimedMsg(gentleMsg,gentleUntilMs,gentleForDate,todayISO,now);
 }
 
 function nightMessage(todayISO){
@@ -1271,7 +1777,7 @@ function applyMode(m){
 
    SAFETY MODEL — read this before changing any timer below.
    1. A moment always returns to the board. beginPhotoMoment() sets a
-      PHOTO_HARD_CAP_MS backstop the instant anything becomes visible,
+      MOMENT_HARD_CAP_MS backstop the instant anything becomes visible,
       independent of the normal hold-then-fade path. If the normal path is
       ever wrong — a bug, a hung transitionend that never fires, anything —
       the hard cap still tears the overlay down. Same structural guarantee as
@@ -1279,14 +1785,18 @@ function applyMode(m){
       comparison, because there is no wall-clock deadline to compare against
       here, only "how long has this been up".
    2. NEVER over a focus message, and NEVER on a screen in night mode unless
-      its SCREEN_MODES entry has nightPhotos:true (table and living room do;
+      its SCREEN_MODES entry has nightMoments:true (table and living room do;
       the bedroom does not, so its dark screen stays dark).
-      contextAllowsPhoto() is the single gate — checked before starting a
-      moment, checked AGAIN at the moment of reveal (a preload can take a few
-      seconds — long enough for a focus message to land while waiting), and
-      checked every second via checkPhotoInterrupt() while one is showing, so
-      a transition into any of those states mid-moment fades it out
-      immediately rather than waiting for it to finish on its own.
+      momentBlockedBy() is the single gate for EVERY kind of moment, with
+      photoBlockedBy() adding the one condition that is media's alone (the
+      master switch) — checked before starting a moment, checked AGAIN at the
+      moment of reveal (a preload can take a few seconds — long enough for a
+      focus message to land while waiting), and checked every second via
+      checkMomentInterrupt() while one is showing, so a transition into any of
+      those states mid-moment fades it out immediately rather than waiting for
+      it to finish on its own. A gentle message gets one extra check in that
+      last place: its own until-instant, so it can never finish a hold it has
+      stopped being true for.
    3. A photo that fails to decode is skipped SILENTLY. No broken-image icon
       ever reaches the screen, because nothing is ever assigned to the real
       <img>'s src until a preload has already fully succeeded — see
@@ -1294,7 +1804,15 @@ function applyMode(m){
    4. The caption asserts nothing. It is warmth/orientation text only
       ("Kathy, your daughter — 2024"), never a status or instruction — that
       is a Sheet-authoring convention this code cannot enforce, so it is
-      written here for whoever edits the Media tab. */
+      written here for whoever edits the Media tab. This is also why a gentle
+      message is its own kind of moment rather than being shoved into the
+      caption slot of a photo: the caption's whole contract is that it never
+      tells her anything is the case.
+   5. ONE moment at a time, structurally. One scheduler, one overlay, one
+      momentState, and attemptMoment() returns immediately unless that state
+      is 'idle'. A photo and a gentle message cannot both be on screen, and
+      neither can two of either. Nothing arbitrates between them at paint
+      time because nothing has to. */
 
 /* The master switch is checked fresh every attempt, never cached — that is
    what makes it a same-fetch, no-redeploy "bad day" off: settings refreshes
@@ -1351,42 +1869,105 @@ function pickNextPhoto(){
   return null;
 }
 
-/** The one gate. Checked before starting, checked again at reveal, checked
- *  every second while showing — see the safety model above. */
-function contextAllowsPhoto(now,todayISO){
-  return !photoBlockedBy(now,todayISO);
-}
-/** Same checks, named — '' means allowed. Split out so ?debug=1 can say WHY
- *  a screen isn't showing photos instead of just that it isn't. */
-function photoBlockedBy(now,todayISO){
-  if(!mediaEnabled()) return 'media off';
-  if(isNight(now)&&!screenMode().nightPhotos) return 'night';
+/** The gate EVERY moment passes, whatever kind it is. '' means allowed; the
+ *  reason is returned rather than a boolean so ?debug=1 can say WHY a screen
+ *  is quiet instead of only that it is. */
+function momentBlockedBy(now,todayISO){
+  if(isNight(now)&&!screenMode().nightMoments) return 'night';
   if(activeFocus(todayISO,now)) return 'focus';
   return '';
 }
-function notePhoto(what){ photoLast=what; photoLastAt=Date.now(); }
+/** The same, plus the one condition that is media's alone: the master switch.
+ *  A gentle message deliberately does NOT sit behind it — media=off is a "no
+ *  photographs today" switch, and it should not also silence somebody saying
+ *  where they are. See the GENTLE MESSAGES block. */
+function photoBlockedBy(now,todayISO){
+  if(!mediaEnabled()) return 'media off';
+  return momentBlockedBy(now,todayISO);
+}
+function noteMoment(what){ momentLast=what; momentLastAt=Date.now(); }
 
-function scheduleNextMediaAttempt(){
-  if(photoTimer) clearTimeout(photoTimer);
-  const everyMin=clampMediaEveryMin(settings.mediaeverymin);
+/* How often the ONE scheduler wakes up: the faster of the two cadences while
+   a gentle message is live, the photo cadence otherwise. A live gentle
+   message therefore TIGHTENS the whole rotation rather than adding a second
+   timer alongside it — photos keep their own slower clock (photoDueAt) and
+   simply take the slots they are due for. */
+function momentEveryMin(){
+  const media=clampMediaEveryMin(settings.mediaeverymin);
+  const now=deviceNow();
+  if(!activeGentle(isoLA(now),now)) return media;
+  return Math.min(media,clampGentleEveryMin(settings.gentleeverymin));
+}
+function scheduleNextMomentAttempt(){
+  if(momentTimer) clearTimeout(momentTimer);
+  const everyMin=momentEveryMin();
   /* +-15% jitter so moments don't feel mechanical; the floor is re-applied
      AFTER jitter so an unlucky low draw can never undercut the safety rail. */
   const jitter=1+((Math.random()*2-1)*0.15);
-  const delayMs=Math.max(Math.round(everyMin*60000*jitter),MEDIA_EVERY_MIN_FLOOR*60000);
-  photoArmedEveryMin=everyMin;
-  photoNextAt=Date.now()+delayMs;
-  photoTimer=setTimeout(attemptMediaMoment,delayMs);
+  const delayMs=Math.max(Math.round(everyMin*60000*jitter),MOMENT_EVERY_MIN_FLOOR*60000);
+  momentArmedEveryMin=everyMin;
+  momentNextAt=Date.now()+delayMs;
+  momentTimer=setTimeout(attemptMoment,delayMs);
 }
-function attemptMediaMoment(){
-  scheduleNextMediaAttempt();      /* always line up the NEXT opportunity first, */
-  if(photoState!=='idle') return;  /* whatever this attempt itself does — one moment at a time */
+/* A due-time is set a little SHORT of the full cadence, because the tick that
+   will serve it is itself jittered by up to -15%. Without the slack a photo
+   whose next tick landed early would find itself not-quite-due, lose the slot
+   and wait a whole extra cadence — which would quietly halve how often photos
+   appear, roughly half the time. 0.8 covers the jitter with margin, and in the
+   no-gentle-message case it makes "is a photo due" true at every tick, i.e.
+   exactly the behaviour this scheduler had before it had two clocks. */
+const MOMENT_DUE_SLACK = 0.8;
+/* Date.now(), NOT deviceNow(). A due-time is a stopwatch — how long since the
+   last one of these — so it belongs on the same unskewed clock the scheduler
+   itself runs on (momentNextAt, momentLastAt, shortIn), never on the
+   server-corrected one. Mixing the two is not a rounding error: clockSkewMs on
+   a drifting Fire TV, or under a ?now= test hook, can be hours, which would
+   make every due-time permanently in the past and hand every single slot to
+   whichever kind is checked first. The skewed clock is for deciding what is
+   TRUE (dates, until-instants); the raw clock is for deciding what is NEXT. */
+function dueIn(everyMin){ return Date.now()+Math.round(everyMin*60000*MOMENT_DUE_SLACK); }
+
+function attemptMoment(){
+  scheduleNextMomentAttempt();      /* always line up the NEXT opportunity first, */
+  if(momentState!=='idle') return;  /* whatever this attempt itself does — one moment at a time */
   const now=deviceNow(), todayISO=isoLA(now);
-  const blocked=photoBlockedBy(now,todayISO);
-  if(blocked){ notePhoto('skipped: '+blocked); return; }   /* silent — a normal, frequent outcome */
-  const photo=pickNextPhoto();
-  if(!photo){ notePhoto('skipped: no eligible photos'); return; }   /* also silent */
-  notePhoto('loading '+photo.file);
-  beginPhotoMoment(photo);
+  const t=Date.now();               /* the scheduler clock — see dueIn() */
+
+  /* Decide what this slot is FOR before committing to it. Asking "could a
+     photo actually run right now" — not merely "is one due" — is what stops a
+     permanently-due photo (media switched off, an empty pool, a screen with
+     no eligible rows) from silently eating every slot the gentle message
+     should have had. A due-but-impossible photo is not a photo. */
+  const photoBlocked=photoBlockedBy(now,todayISO);
+  const photoReady=(t>=photoDueAt)&&!photoBlocked&&!!eligiblePhotos().length;
+
+  const momentBlocked=momentBlockedBy(now,todayISO);
+  const gentleText=momentBlocked?'':activeGentle(todayISO,now);
+  const gentleReady=!!gentleText&&(t>=gentleDueAt);
+
+  /* A photo wins a tie, deliberately. It is the rarer event and there are only
+     a handful of them; the gentle message comes back round within minutes by
+     construction, so yielding a slot costs it almost nothing and starves it of
+     nothing — its own due-time stays passed, so it takes the very next slot. */
+  if(photoReady){
+    photoDueAt=dueIn(clampMediaEveryMin(settings.mediaeverymin));
+    const photo=pickNextPhoto();
+    if(photo){ noteMoment('loading '+photo.file); beginPhotoMoment(photo); return; }
+  }
+  if(gentleReady){
+    gentleDueAt=dueIn(clampGentleEveryMin(settings.gentleeverymin));
+    beginGentleMoment(gentleText);
+    return;
+  }
+  /* Silent, and a normal, frequent outcome. Named for ?debug=1 only — the
+     board looks identical whichever of these it was. The gate that stops
+     EVERYTHING is the headline when it applies; otherwise both sides report,
+     because "why is this screen quiet" has two independent answers now and
+     naming only one of them is how you chase the wrong thing from 5,000
+     miles away. */
+  noteMoment('skipped: '+(momentBlocked||
+    ('photo '+(photoBlocked||(eligiblePhotos().length?'not due':'none eligible'))+
+     ', gentle '+(gentleText?'not due':'none'))));
 }
 
 /** new Image() + decode(), never the real on-screen <img>, so a failure never
@@ -1416,7 +1997,7 @@ function preloadPhoto(url){
 function beginPhotoMoment(photo){
   const url=mediaUrlFor(photo.file);
   if(!url){ return; }
-  photoState='loading';
+  momentState='loading';
   const token=++photoLoadToken;
   preloadPhoto(url).then(function(img){
     if(token!==photoLoadToken) return;   /* superseded — an interrupt already reset us */
@@ -1426,8 +2007,8 @@ function beginPhotoMoment(photo){
     /* SKIP SILENTLY. Never a broken-image icon, never a blank board — the
        board simply stays exactly as it already was. */
     mediaFailedAt[photo.file]=Date.now();
-    notePhoto('FAILED to load '+photo.file);
-    photoState='idle';
+    noteMoment('FAILED to load '+photo.file);
+    momentState='idle';
   });
 }
 
@@ -1437,12 +2018,19 @@ function revealPhoto(photo,img){
      to open while this was in flight. */
   const now=deviceNow(), todayISO=isoLA(now);
   const blocked=photoBlockedBy(now,todayISO);
-  if(blocked){ notePhoto('skipped at reveal: '+blocked); photoState='idle'; return; }
+  if(blocked){ noteMoment('skipped at reveal: '+blocked); momentState='idle'; return; }
 
-  const photoEl=document.getElementById('photo');
+  const momentEl=document.getElementById('moment');
   const imgEl=document.getElementById('photo-img');
   const capBox=document.getElementById('photo-cap-box');
   const capEl=document.getElementById('photo-cap');
+
+  /* Each reveal puts the overlay into ITS shape rather than trusting whatever
+     the last moment left behind. endMoment() already resets to the photo
+     shape, so this is belt and braces — and it is what lets either kind of
+     moment follow either kind without a special case. */
+  document.getElementById('moment-img-wrap').hidden=false;
+  document.getElementById('moment-msg-box').hidden=true;
 
   imgEl.src=img.src;         /* already fully decoded — this paint is instant */
   const caption=String(photo.caption||'').trim();
@@ -1455,60 +2043,114 @@ function revealPhoto(photo,img){
   }
 
   mediaLastShownFile=photo.file;
-  notePhoto('shown '+photo.file);
-  photoState='showing';
+  noteMoment('shown '+photo.file);
+  momentKind='photo';
+  momentState='showing';
   /* Two rAFs, not one: the opacity:0 state needs a full style/layout pass
      committed before .show is added, or the very first paint can already
      land mid-transition and the fade reads as a hard cut on a fast machine. */
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){
-      if(photoState==='showing') photoEl.classList.add('show');
+      if(momentState==='showing') momentEl.classList.add('show');
     });
   });
 
   const holdMs=clampMediaHoldSec(settings.mediaholdsec)*1000;
-  clearTimeout(photoHoldTimer);
-  photoHoldTimer=setTimeout(beginPhotoFadeOut,holdMs);
+  clearTimeout(momentHoldTimer);
+  momentHoldTimer=setTimeout(beginMomentFadeOut,holdMs);
   /* The backstop. Armed the instant anything becomes visible; see the safety
      model comment above this whole section for why it is independent of the
      hold timer rather than derived from it. */
-  clearTimeout(photoHardCapTimer);
-  photoHardCapTimer=setTimeout(forceEndPhotoMoment,PHOTO_HARD_CAP_MS);
+  clearTimeout(momentHardCapTimer);
+  momentHardCapTimer=setTimeout(forceEndMoment,MOMENT_HARD_CAP_MS);
 }
 
-function beginPhotoFadeOut(){
-  if(photoState!=='showing') return;
-  photoState='fading-out';
-  document.getElementById('photo').classList.remove('show');
-  clearTimeout(photoHoldTimer);
-  clearTimeout(photoFadeOutTimer);
-  photoFadeOutTimer=setTimeout(endPhotoMoment,PHOTO_FADE_MS+250);
+/* A gentle message needs no preload, so it has no 'loading' state and no
+   token: the text is already here, and the only thing between deciding to
+   show it and it being on screen is a layout pass. Everything AFTER that
+   point — hold, fade, hard cap, interrupt — is the same machinery a photo
+   uses, which is the entire reason this is a moment and not a mode. */
+function beginGentleMoment(text){
+  const momentEl=document.getElementById('moment');
+  document.getElementById('moment-img-wrap').hidden=true;
+  document.getElementById('photo-cap-box').style.display='none';
+  const box=document.getElementById('moment-msg-box');
+  box.hidden=false;
+  setTextWithBreaks(document.getElementById('moment-msg'),text);
+  /* Fitted with the SAME machinery as a takeover and a caption, against a
+     lower ceiling — see GENTLE_MSG_MAX. Measured after the box is un-hidden:
+     a hidden box has no height, and auto-fitting against one is exactly how a
+     layout silently collapses to its minimum type size. */
+  fitMessage('moment-msg-box','moment-msg',GENTLE_MSG_MAX,MSG_MIN);
+
+  momentKind='gentle';
+  momentState='showing';
+  noteMoment('gentle shown');
+  /* Two rAFs, not one — same reason as revealPhoto(): the opacity:0 state
+     needs a full style/layout pass committed before .show is added, or the
+     fade reads as a hard cut on a fast machine. */
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      if(momentState==='showing') momentEl.classList.add('show');
+    });
+  });
+
+  const holdMs=clampGentleHoldSec(settings.gentleholdsec)*1000;
+  clearTimeout(momentHoldTimer);
+  momentHoldTimer=setTimeout(beginMomentFadeOut,holdMs);
+  /* The same backstop a photo gets, for the same reason. */
+  clearTimeout(momentHardCapTimer);
+  momentHardCapTimer=setTimeout(forceEndMoment,MOMENT_HARD_CAP_MS);
+}
+
+function beginMomentFadeOut(){
+  if(momentState!=='showing') return;
+  momentState='fading-out';
+  document.getElementById('moment').classList.remove('show');
+  clearTimeout(momentHoldTimer);
+  clearTimeout(momentFadeOutTimer);
+  momentFadeOutTimer=setTimeout(endMoment,MOMENT_FADE_MS+250);
 }
 /** The only place that actually tears everything down, reachable from the
  *  normal path (after the fade completes) OR the hard cap (from ANY state).
  *  Always leaves the board clean: no lingering src, no stale caption, no
  *  visible overlay, whatever was interrupted mid-flight. */
-function endPhotoMoment(){
+function endMoment(){
   photoLoadToken++;      /* invalidates any preload still in flight */
-  clearTimeout(photoHoldTimer); clearTimeout(photoFadeOutTimer); clearTimeout(photoHardCapTimer);
-  photoHoldTimer=photoFadeOutTimer=photoHardCapTimer=null;
-  const photoEl=document.getElementById('photo');
-  photoEl.classList.remove('show');
+  clearTimeout(momentHoldTimer); clearTimeout(momentFadeOutTimer); clearTimeout(momentHardCapTimer);
+  momentHoldTimer=momentFadeOutTimer=momentHardCapTimer=null;
+  const momentEl=document.getElementById('moment');
+  momentEl.classList.remove('show');
   const imgEl=document.getElementById('photo-img');
   imgEl.removeAttribute('src'); imgEl.src='';
   document.getElementById('photo-cap').textContent='';
   document.getElementById('photo-cap-box').style.display='none';
-  photoState='idle';
+  /* The message half, torn down the same way and left in the photo-shaped
+     default: no stale sentence sitting in the DOM at opacity:0 waiting for
+     the next fade-in to reveal it. */
+  document.getElementById('moment-msg').textContent='';
+  document.getElementById('moment-msg-box').hidden=true;
+  document.getElementById('moment-img-wrap').hidden=false;
+  momentKind='';
+  momentState='idle';
 }
-function forceEndPhotoMoment(){ endPhotoMoment(); }   /* named for what fired it, under ?debug=1 */
+function forceEndMoment(){ endMoment(); }   /* named for what fired it, under ?debug=1 */
 
 /** Called every second from tick(). A 'loading' moment needs no action here —
  *  revealPhoto()'s own re-check already refuses to show anything that has
  *  stopped being allowed while it was decoding — so this only ever acts on
  *  a moment already on screen. */
-function checkPhotoInterrupt(now,todayISO){
-  if(photoState!=='showing') return;
-  if(!contextAllowsPhoto(now,todayISO)) beginPhotoFadeOut();
+function checkMomentInterrupt(now,todayISO){
+  if(momentState!=='showing') return;
+  if(momentKind==='gentle'){
+    /* Two reasons to pull it, and the second is the one that matters: a
+       gentle message reaches its until-instant exactly as a takeover does,
+       and it must not sit out a hold it has stopped being true for. Checked
+       on the clock, every second, with no network — same as the takeover. */
+    if(momentBlockedBy(now,todayISO)||!activeGentle(todayISO,now)) beginMomentFadeOut();
+    return;
+  }
+  if(photoBlockedBy(now,todayISO)) beginMomentFadeOut();
 }
 
 /* 9. PAINT — assemble what to show from whatever state we have */
@@ -1572,7 +2214,7 @@ function tick(){
   /* Checked every second regardless of which branch below runs — a photo
      moment interrupt must not wait on the once-a-day date-line branch, and a
      photo can be showing on any ordinary second. */
-  checkPhotoInterrupt(now,todayISO);
+  checkMomentInterrupt(now,todayISO);
   if(line!==shownDate){                     /* also catches midnight rollover */
     const firstPaint=(shownDate===null);
     shownDate=line;
@@ -1739,24 +2381,57 @@ function debugPaint(){
      here would just be noise on the table or living room. */
   const fsWhy=fsDetail?' ('+fsDetail+')':'';
   const fsLine=fsApplies()?'\nFULL '+fsState+fsWhy+'   drops '+fsDrops:'';
-  /* photoState is not styled to be as terse as the rest of this line \u2014 a dark
-     screen while `photo showing` reads is a plain photo moment, not a fault,
+  /* momentState is not styled to be as terse as the rest of this line — a dark
+     screen while `showing (photo)` reads is a plain photo moment, not a fault,
      and that distinction matters more here than density does. */
-  /* The photo line answers "why isn't this screen showing photos" on its
-     own: when the next try is, what the last try did, and how many photos
-     this screen is actually allowed. */
-  const nowD=deviceNow();
-  const blockedNow=photoBlockedBy(nowD,isoLA(nowD));
-  const next=photoTimer?shortIn(photoNextAt):'never (not armed)';
-  const photoLine='\nPHOTO '+photoState+(blockedNow?' ['+blockedNow+']':'')+
-    '   next '+next+'   every '+clampMediaEveryMin(settings.mediaeverymin)+'m'+
+  /* The moment line answers "why isn't this screen showing anything" on its
+     own: what the overlay is doing, when the next slot is, what the last
+     attempt did, and how many photos this screen is actually allowed. The
+     cadence printed is the SCHEDULER's — which a live gentle message pulls
+     down — with the photo's own cadence after it, because "every 2m / photo
+     80m" is the whole explanation for a board that is showing text often and
+     pictures rarely. */
+  const nowD=deviceNow(), todayD=isoLA(nowD);
+  const blockedNow=photoBlockedBy(nowD,todayD);
+  const next=momentTimer?shortIn(momentNextAt):'never (not armed)';
+  const momentLine='\nMOMENT '+momentState+(momentKind?' ('+momentKind+')':'')+
+    (blockedNow?'   photo ['+blockedNow+']':'')+
+    '   next '+next+'   every '+momentEveryMin()+'m'+
+    '   photo every '+clampMediaEveryMin(settings.mediaeverymin)+'m'+
     '   pool '+eligiblePhotos().length+'/'+(mediaList||[]).length+
-    '   last '+photoLast+(photoLastAt?' '+shortAgo(photoLastAt)+' ago':'');
+    '   last '+momentLast+(momentLastAt?' '+shortAgo(momentLastAt)+' ago':'');
+  /* Its own line, and printed even when there is no gentle message, because
+     "nothing was typed" and "something was typed and is being suppressed" are
+     the two answers this feature will actually be asked for, and from a camera
+     they otherwise look identical. */
+  const gLive=activeGentle(todayD,nowD);
+  const gBlocked=momentBlockedBy(nowD,todayD);
+  const gentleLine=!gentleMsg?'\nGENTLE none' :
+    '\nGENTLE '+(gLive?(gBlocked?'live ['+gBlocked+']':'live'):'expired')+
+    (gentleUntilMs?'   till '+fmtTime.format(new Date(gentleUntilMs)):'')+
+    '   every '+clampGentleEveryMin(settings.gentleeverymin)+'m'+
+    '   due '+((gLive&&!gBlocked)?shortIn(gentleDueAt):'-');
+  /* The check-in line answers the two questions this feature will actually be
+     asked from 5,000 miles away: is the strip even on, and did her press
+     arrive. The date is printed because "on, but showing nothing" is the
+     midnight-rollover case and it is otherwise indistinguishable from a
+     broken endpoint. */
+  const checkLine='\nCHECK '+(checkinsEnabled()?'on':'off')+
+    (TEST_CHECKINS?' (url)':'')+
+    (chipsDropped?' DROPPED(no room)':'')+
+    '   poll '+Math.round(refreshMs()/1000)+'s'+
+    '   for '+(logRow?logRow.forDate:'\u2014')+
+    (logRow&&logRow.forDate!==todayD?' STALE':'')+
+    '   '+CHECKINS.map(function(c){
+      const at=todaysCheckIns(todayD)[c.kind];
+      return c.kind.replace('medicine-','med ')+' '+
+             ((typeof at==='number'&&at>0)?fmtTime.format(new Date(at)):'\u2014');
+    }).join('  ');
   dbgEl.textContent=
     'WAKE '+wakeState+age+why+'   releases '+wakeReleases+fsLine+'\n'+
     SCREEN+'   data '+shortAgo(lastOkAt)+'   beat '+hbState+
-    '   mode '+mode+until+'   photo '+photoState+
-    '   '+window.innerWidth+'\u00d7'+window.innerHeight+photoLine;
+    '   mode '+mode+until+
+    '   '+window.innerWidth+'\u00d7'+window.innerHeight+momentLine+gentleLine+checkLine;
 }
 
 /* 14. FIT — fill the screen.
@@ -1830,6 +2505,22 @@ function applyTestHooks(){
     }
     setFocus(f,until,today);                              /* same path as a fetch */
   }
+  /* Same parsing, same setter, same safety model — a gentle message forced
+     from the URL is not a second kind of gentle message. */
+  const gt=paramOf('gentle');
+  if(gt){
+    const today=isoLA(deviceNow());
+    const raw=paramOf('gentleuntil').trim();
+    let until;
+    if(/^\d{10,}$/.test(raw)) until=+raw;                 /* raw epoch ms    */
+    else{
+      const min=parseClockMin(raw);
+      until=laLocalToEpoch(today,min===null?24*60:min);   /* blank -> day end */
+    }
+    setGentle(gt,until,today);
+  }
+  const geh=paramOf('gentleeverymin'); if(geh) settings.gentleeverymin=geh;
+  const ghh=paramOf('gentleholdsec'); if(ghh) settings.gentleholdsec=ghh;
   /* Photo moments are driven by a cadence measured in tens of minutes and a
      master switch that defaults off — neither is reachable by hand on a
      running board, same reasoning as night/focus above. */
@@ -1837,11 +2528,25 @@ function applyTestHooks(){
   const meh=paramOf('mediaeverymin'); if(meh) settings.mediaeverymin=meh;
   const mhh=paramOf('mediaholdsec'); if(mhh) settings.mediaholdsec=mhh;
   /* "Show me one right now" without waiting out the cadence. Still goes
-     through the normal gate (contextAllowsPhoto) — this bypasses the WAIT,
+     through the normal gate (photoBlockedBy) — this bypasses the WAIT,
      not any of the safety checks, exactly like &focus= bypasses the Sheet
      edit but not the safety model around it. */
   if(/(^|[?&])photonow=1(&|$)/.test(location.search)){
-    setTimeout(attemptMediaMoment,50);
+    setTimeout(attemptMoment,50);
+  }
+  /* The gentle equivalent, and it cannot just call attemptMoment(): that
+     hands a tie to the photo, so on a board with photos enabled &gentlenow=1
+     would show a picture. This skips the SLOT ALLOCATION only — the gate and
+     the expiry check are both still asked, exactly as attemptMoment() asks
+     them. */
+  if(/(^|[?&])gentlenow=1(&|$)/.test(location.search)){
+    setTimeout(function(){
+      const now=deviceNow(), todayISO=isoLA(now);
+      const blocked=momentBlockedBy(now,todayISO);
+      const text=blocked?'':activeGentle(todayISO,now);
+      if(text&&momentState==='idle') beginGentleMoment(text);
+      else noteMoment('gentlenow: '+(blocked||'no active gentle message'));
+    },50);
   }
 }
 
@@ -1858,6 +2563,19 @@ restore();
    so a real cached list (if this URL is ever opened without demo) can't leak
    into a demo session — demo content is always exactly DEMO_DATA. */
 if(DEMO) mediaList=DEMO_DATA.media.slice();
+/* Same reasoning as the media seed: DEMO never fetches, so without this the
+   strip would be four grey chips in every demo and would look unbuilt rather
+   than off. Stamped with TODAY's date, through the same setLog() a fetch uses
+   — including its forDate guard — so the demo cannot show a state the real
+   board could not. */
+if(DEMO){
+  const t=deviceNow(), base=new Date(t.getFullYear(),t.getMonth(),t.getDate());
+  const seeded={};
+  Object.keys(DEMO_DATA.checkins).forEach(function(k){
+    seeded[k]=base.getTime()+DEMO_DATA.checkins[k]*60000;
+  });
+  setLog(seeded,isoLA(t));
+}
 applyTestHooks();             /* after restore(), so a hook always wins    */
 fit();
 tick();                       /* paints from restored/empty state at once */
@@ -1865,12 +2583,12 @@ loadData();
 requestWakeLock();
 requestFullscreenExperiment();  /* no-op unless SCREEN==='bedroom'          */
 /* Every screen, bedroom included. At night the timer still fires but
-   photoBlockedBy() returns 'night' and nothing is shown. */
-scheduleNextMediaAttempt();
+   momentBlockedBy() returns 'night' and nothing is shown. */
+scheduleNextMomentAttempt();
 debugPaint();
 
 setInterval(tick,1000);       /* live clock + date rollover at midnight   */
-setInterval(loadData,REFRESH_MS);
+setInterval(loadData,refreshMs());     /* 60s on the table, 3 min elsewhere */
 setInterval(paint,60*1000);   /* lets the staleness note appear on its own */
 setInterval(debugPaint,1000); /* no-op without ?debug=1                   */
 /* Slow retry only. Fast enough to recover a lock the system took back,
@@ -1899,11 +2617,16 @@ function reloadUrl(){
   const q=['v='+Date.now()];
   if(SCREEN&&SCREEN!=='unnamed') q.push('screen='+encodeURIComponent(SCREEN));
   if(DEBUG) q.push('debug=1');
+  /* Carried like ?screen= and ?debug=, not like the demo hooks: this one is
+     used on a live board, so losing it at the hourly reload would look exactly
+     like the feature having broken. */
+  if(TEST_CHECKINS) q.push('checkins=1');
   if(DEMO){
     q.push('demo=1');
     /* Carry the test hooks too, for the same reason: a demo window left open
        overnight must not quietly become a different test an hour later. */
     ['night','nightmsg','focus','focusuntil','now',
+     'gentle','gentleuntil','gentleeverymin','gentleholdsec',
      'media','mediaeverymin','mediaholdsec'].forEach(function(k){
       const v=paramOf(k);
       if(v) q.push(k+'='+encodeURIComponent(v));

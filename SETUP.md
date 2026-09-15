@@ -114,9 +114,14 @@ the deliberate default.
 | alertAfterMinutes | 15 |
 | focus | *(usually blank — see §3)* |
 | focusUntil | *(usually blank — see §3)* |
+| gentle | *(usually blank — see §3a)* |
+| gentleUntil | *(usually blank — see §3a)* |
+| gentleEveryMin | *(blank — see §3a)* |
+| gentleHoldSec | *(blank — see §3a)* |
 | night | It's the middle of the night.\|You're home and safe.\|It's not morning yet. |
 | nightStart | 8:00 pm |
 | nightEnd | 6:00 am |
+| checkins | *(blank — see §5a)* |
 | media | *(blank — see §5)* |
 | mediaEveryMin | *(blank — see §5)* |
 | mediaHoldSec | *(blank — see §5)* |
@@ -137,6 +142,10 @@ the deliberate default.
   anything above ~10 is safe from false alarms.
 - **focus** and **focusUntil** — a message that takes over the whole screen.
   Normally both blank. **See §3, "Putting one big message on the screen".**
+- **gentle**, **gentleUntil**, **gentleEveryMin**, **gentleHoldSec** — the
+  quieter version of the same thing: a message that comes round every few
+  minutes for a few seconds instead of taking the board over. Normally all
+  blank. **See §3a, "The quieter version".**
 - **nightStart** and **nightEnd** — when every screen dims, and when it stops.
   **Two separate rows** — one row saying `nightStart / nightEnd` does not work;
   the board would ignore it and quietly keep 8:00 pm.
@@ -144,6 +153,8 @@ the deliberate default.
   keep their usual board, so this does not affect them.
 - All three are optional; leaving them out gives the defaults above.
   **See §4, "The evening and the bedroom at night".**
+- **checkins** — `on` shows the row of four check-in chips. Anything else, or
+  blank, hides it completely. **See §5a, "Check-ins".**
 - **media**, **mediaEveryMin**, **mediaHoldSec** — the photo moments master
   switch and its timing. All optional; leaving them out means no photo moments
   at all, which is the default. **See §5, "Photo moments".**
@@ -207,6 +218,64 @@ a message like this is *worse* than nothing once it has stopped being true.
 
 If nothing appears, open the `/exec` URL in a browser and read the `warnings`
 list — an unrecognised `focusUntil`, or one already in the past, says so there.
+
+---
+
+## 3a. The quieter version — a message that comes round
+
+A takeover is the right tool when the board is genuinely in the way. Often it
+isn't. You are out for a couple of hours, you would like her to be reminded of
+that now and then, and you do not want the calendar and the routine gone all
+afternoon to say it.
+
+`gentle` is that. **Same message, same deadline, but it does not take the
+board over.** It fades in over the board for about twenty seconds every
+fifteen minutes, then fades out and the board is back exactly as it was — the
+same way the photo moments work.
+
+| Key | Value |
+|-----|-------|
+| gentle | Greg is at the store. He'll be back around 4:00. |
+| gentleUntil | 4:00 pm |
+
+**Everything §3 says about `focusUntil` is true of `gentleUntil`**, in exactly
+the same words and for exactly the same reason: blank means end of day, it is
+today only, anything later than tonight is pulled back, and it takes itself
+down with no network. If anything the deadline matters *more* here — a wrong
+takeover is at least sitting in front of whoever next walks in, while a wrong
+gentle message keeps coming back when nobody is watching.
+
+**Two optional dials**, both safe to leave blank:
+
+| Key | Default | What it does |
+|-----|---------|--------------|
+| gentleEveryMin | 15 | How often it comes round. Minimum 2. |
+| gentleHoldSec | 20 | How long it stays up each time. 5–60. |
+
+- **`gentleEveryMin` goes down to 2 minutes** when a day needs a much steadier
+  pulse than the default. That is a real setting, not a safety valve — but at
+  2 minutes with the default hold the message is on screen roughly a sixth of
+  the time, so reach for it deliberately and put a `gentleUntil` on it.
+- **Photos keep their own pace.** If `media` is on, photo moments still appear
+  as often as `mediaEveryMin` says; they simply take their turn in the same
+  rotation. Only one thing is ever on screen at a time — a photo and a gentle
+  message can never overlap or fight.
+- **`media` off does not silence it.** That switch is about photographs. A
+  gentle message runs whether or not photos are on.
+- **The bedroom at night does not show it**, the same as photos — the dark
+  screen stays dark. The living areas do.
+- **`focus` wins.** If both cells are filled in, the takeover shows and the
+  gentle message waits until the takeover clears. The `warnings` list says so.
+- `{days:2026-08-20}` works inside the message, same as everywhere else.
+
+**Which one do I want?**
+
+| | `focus` | `gentle` |
+|---|---|---|
+| The board | gone while it runs | still there between turns |
+| On screen | continuously | ~20s every ~15 min |
+| Use it when | the board is in the way | the board is still useful |
+| Example | "Stay inside. Greg is on his way." | "Greg is at the store, back around 4:00." |
 
 ---
 
@@ -330,6 +399,147 @@ went wrong the ordinary board is always what comes back.
 
 ---
 
+## 5a. Check-ins — four buttons on her phone
+
+She taps a button on her phone when she takes her morning medicine, her evening
+medicine, showers, or exercises. The board shows four chips: grey with no time,
+or green with a checkmark and the time it was recorded. They clear at midnight.
+
+**She never touches the television.** The board stays read-only; the buttons
+are on the phone.
+
+This needs four things set up, in this order.
+
+### 1. A new tab called `Log`
+
+Three columns, headers in row 1, spelled like this:
+
+| Timestamp | Kind | Date |
+|---|---|---|
+| *(the script fills these in)* | | |
+
+Leave it empty. The script writes the header row itself the first time a button
+is pressed, so if you get the spelling slightly wrong the simplest fix is to
+delete the tab's contents and let it rebuild.
+
+Rows arrive looking like `2026-09-15 08:20 | medicine-am | 2026-09-15`. The date
+is stored twice on purpose, so the tab is readable and sortable by hand.
+
+**To undo a mistaken tap, delete that row.** There is no undo on her end — see
+the limitations at the end of this section.
+
+### 2. A secret, set once
+
+The `/exec` URL is public, so the buttons need a password of sorts. It is
+**not** stored in the code, because the code is in a public repository.
+
+1. In the Sheet: **Extensions → Apps Script**
+2. **Project Settings** (the gear on the left)
+3. Scroll to **Script properties → Add script property**
+4. Property: `LOG_TOKEN`
+5. Value: a long random string you make up — say 20+ characters of letters and
+   numbers. Keep a copy; you need it in step 4.
+6. **Save script properties**
+
+> If this property is missing, **every** button press is rejected. That is
+> deliberate: an unconfigured board must be closed, not open.
+
+### 3. Turn the chips on
+
+In `Settings`, add a row: key `checkins`, value `on`.
+
+Leave it off until you have seen the strip on the table display. You can preview
+it on one screen without touching the Sheet by opening that display's URL with
+`&checkins=1` on the end.
+
+### 4. Four Shortcuts on her phone
+
+**There is no Google account on her phone, and there does not need to be.**
+Nothing Google-branded is installed or signed in — no Sheets app, no Drive, no
+account, no login. The Shortcut makes a plain web request, and the script runs
+as *you*, the owner. Her phone is just an anonymous visitor to a web address.
+Shortcuts is already on every iPhone.
+
+That is worth knowing because of what it removes: no session that can expire, no
+app update that changes a login screen, no permission dialog she has to
+interpret months from now.
+
+**Build each one like this** (Shortcuts app → **+**):
+
+1. **Get Contents of URL** — method GET, URL:
+
+   ```
+   https://script.google.com/macros/s/AKfycbxWpXuqZTXYxlk1gP8JtvML1tDoajdAK5nckcoO_uLMZlwZr6e8yt7SAt0CzWFEQE2A/exec?log=medicine-am&k=YOUR_TOKEN
+   ```
+
+2. **Get Dictionary Value** — key `ok`, from the contents above
+3. **If** → *Otherwise* → **End If**, with a **Show Notification** in each branch
+
+The four URLs differ only in `log=`:
+
+| Shortcut name | `log=` |
+|---|---|
+| Morning Medicine | `medicine-am` |
+| Evening Medicine | `medicine-pm` |
+| Shower | `shower` |
+| Exercise | `exercise` |
+
+**The notification is the whole interaction**, so it has to say which of three
+things happened. A Shortcut that fails silently is worse than no Shortcut at
+all — she would have no way to know, and would tap again.
+
+| What happened | What she should see |
+|---|---|
+| Recorded | `Recorded — Morning medicine, 8:20 AM` |
+| Already recorded today | `Already recorded at 8:20 AM` |
+| Anything went wrong | `Couldn't record — try again in a minute` |
+
+To build those three messages, read `already` and `at` out of the reply with two
+more **Get Dictionary Value** steps. The reply always looks like one of:
+
+```
+{ "ok": true,  "kind": "medicine-am", "already": false, "at": "8:20 AM" }
+{ "ok": true,  "kind": "medicine-am", "already": true,  "at": "8:20 AM" }
+{ "ok": false, "error": "unauthorized" }
+```
+
+**Tapping twice is safe and always has been.** The second tap does not record a
+second event — it answers with the *first* time. That is on purpose: checking
+"did I already do that?" by pressing the button again is exactly what she will
+do, and it has to give the right answer.
+
+Put all four on her home screen, or use a single Shortcuts widget with four
+buttons — try the widget first, it saves a tap.
+
+> **One thing to verify on the real phone:** `/exec` bounces the request to a
+> second address (`googleusercontent.com`) before answering. Shortcuts normally
+> follows that automatically, but it has not been tested on her handset. If the
+> notification never shows a time, that redirect is the first thing to suspect.
+
+### Run each Shortcut once, during setup
+
+The **first** time each Shortcut runs, iOS asks whether to allow it to send data
+to `script.google.com`. That prompt is exactly what she should never have to
+answer — and it appears **once per Shortcut**.
+
+**So run all four yourself during setup and approve the prompt then.** Four taps
+buys a permanently clean interaction afterwards.
+
+This decides *where* setup happens. Building the Shortcuts on another phone and
+sending them across works, but it puts that prompt back in front of her the
+first time she uses each one. Build them **on her phone** — which in practice
+means Greg on the laptop reading this out, and whoever is with her holding the
+handset.
+
+### Two honest limitations
+
+- **The token stops accidents, not people.** Anyone who has both the `/exec`
+  URL and the token can write rows. It is a lock on a garden gate, not a safe.
+- **A mistaken tap has no undo on her end.** Correcting one means deleting that
+  row in the `Log` tab.
+
+---
+
 ## 6. Publish the script
 
 1. In the Sheet: **Extensions → Apps Script**.
@@ -395,6 +605,19 @@ what the URL serves. This catches everyone once.
 > exactly as before — no error, nothing broken, nothing on screen. Open `/exec`
 > and look for `"focusUntilEpochMs"`: if that word is not in the response, the
 > deployment is still the old version.
+
+> **So does `gentle` (§3a).** Same failure, same shape: until the redeploy the
+> rotating message simply never appears and the board carries on exactly as
+> before. Open `/exec` and look for `"gentleUntilEpochMs"` — if that word is
+> not in the response, the deployment is still the old version. Note `focus`
+> can be working fine while `gentle` is not: `"focusUntilEpochMs"` came in an
+> earlier version, so its presence does **not** tell you this one landed.
+
+> **So does the `Log` tab (§5a)** — and here the redeploy comes FIRST, before
+> anything else in that section works: until it lands, a button press returns
+> the old script's ordinary board JSON instead of an acknowledgement, and the
+> Shortcut shows the failure notification. Open `/exec` and look for
+> `"logForDate"`.
 
 > **And the `Media` tab (§5) needs one, once — the first time this board is
 > set up with photo moments in mind.** Until that redeploy `/exec` never
@@ -475,6 +698,9 @@ Designed to be wrong in the safe direction rather than confidently wrong.
 | `focusUntil` is set past tonight | Pulled back to the end of today, with a note in `warnings`. Anything longer belongs in a NOTES line. |
 | `focusUntil` is unreadable ("soonish") | The message still shows, until the end of today, and `warnings` says so. Better than silently swallowing something urgent. |
 | `focus` is blank or missing | No takeover. The ordinary board, exactly as before. |
+| `gentle` is up and the wifi dies | Same as a takeover: it still stops at its own `gentleUntil`. The deadline travels with the message. |
+| `gentle` and `focus` are both set | The takeover shows; the gentle message waits for it to clear. `warnings` says so. |
+| `gentleEveryMin` is 0 or nonsense | Pulled up to the 2-minute minimum. A typo cannot turn it into a strobe. |
 | `night` is blank or missing | The bedroom still goes dark at night and shows the built-in message. |
 
 The rule behind all of it: **undated information expires, dated information does
@@ -505,6 +731,10 @@ and without waiting for 8pm. Add any of these to that URL:
 | `&night=1` | the night screen |
 | `&focus=Greg stepped out, back around 4:00` | a takeover |
 | `&focusuntil=4:00 pm` | …with that deadline |
+| `&gentle=Greg is at the store, back around 4:00` | a rotating message instead |
+| `&gentleuntil=4:00 pm` | …with that deadline |
+| `&gentleeverymin=3` `&gentleholdsec=8` | …at that pace |
+| `&gentlenow=1` | show it now instead of waiting |
 | `&nightmsg=…` | try a different night message |
 | `&now=2026-08-15T22:30` | pretend it is this time; the clock runs on from there |
 | `&screen=bedroom` | the display that has a night mode |

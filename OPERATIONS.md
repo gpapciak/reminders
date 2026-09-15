@@ -268,6 +268,27 @@ experiment could reach.
 because of that Pages cache, plus up to an hour for the reload to fire. Not a
 bug — just don't expect a push to appear instantly on the screen.
 
+**Refresh rate and the script-runtime quota (2026-09-15).** The table display
+now polls every **120s**; the living room and bedroom stay at 180s. That is a
+deliberate step down from the 60s the check-ins feature wanted. `/exec` was
+measured at **4.0–8.5s per call**, of which ~0.08s is network — so effectively
+all of it counts against a consumer account's 90-minutes-a-day script runtime
+cap. Three screens at 180s is already 1,440 calls/day; 60s on the table would
+have made it 2,400 (1.67×), 120s makes it 1,680 (1.17×). At anything like the
+measured per-call cost, the *current* load is already the same order as the
+cap — the likely reason it has never bitten is that the Fire TVs sleep, not
+that there is headroom. The billed figure is only visible in Apps Script →
+Executions, so that is where the 60s decision should be finished.
+`BEAT_MIN_GAP_MS` was raised 45s → 150s at the same time, so the faster screen
+writes its heartbeat no more often than before and the change costs no extra
+Sheet writes at all. The durable fix is cheaper reads: `doGet` calls
+`getDataRange()` on every tab on every call, including `Days` and `Events`,
+which change a few times a week.
+
+**One stray row to delete.** Measuring the above sent a handful of requests
+with `?screen=measure-only`, so the `Status` tab has a `measure-only` device
+row that will sit there reading `CHECK`. It is harmless — delete it.
+
 ---
 
 ## Recovery hierarchy

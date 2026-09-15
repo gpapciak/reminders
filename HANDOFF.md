@@ -98,6 +98,10 @@ data a household depends on.
 | `&media=on` / `&media=off` | force the photo-moments master switch |
 | `&mediaeverymin=N` / `&mediaholdsec=N` | override the cadence / hold, still passing through the same clamps |
 | `&photonow=1` | fire one attempt ~50ms after boot, bypassing the WAIT only — every safety check still applies |
+| `&gentle=TEXT` | force a rotating message |
+| `&gentleuntil=4:00 pm` | …until this LA time (blank or unparseable = end of day) |
+| `&gentleeverymin=N` / `&gentleholdsec=N` | override its cadence / hold, still through the same clamps |
+| `&gentlenow=1` | show it ~50ms after boot. Cannot just call `attemptMoment()` — that hands a tie to the photo — so it skips the slot allocation only; the gate and the expiry check both still run |
 
 Set as a clock *skew*, not a frozen time, so a boundary crossing can be watched
 happening. They are carried across the hourly reload too (`photonow` is not —
@@ -303,6 +307,51 @@ In v1 focus is **global** — one message on every screen, rendered in whatever
 palette each screen currently warrants. Per-screen targeting is a documented
 future option (it would want its own tab), not now.
 
+### Gentle — the same news, without the takeover
+
+Added 2026-09-15. `Settings.gentle` / `gentleUntil` is the **counterpart** to a
+focus takeover, not a variant of it:
+
+| | `focus` | `gentle` |
+|---|---|---|
+| What it is | a display **mode** (`selectMode`) | a **moment** (the overlay) |
+| The board | suppressed while it runs | untouched between turns |
+| On screen | continuously | ~`gentleHoldSec` every `gentleEveryMin` |
+| Type ceiling | `MSG_MAX` (160) | `GENTLE_MSG_MAX` (96, provisional) |
+| Use it when | the board is in the way | the board is still useful |
+
+The motivating case: a carer is out for the afternoon and wants her reassured
+about it *periodically*, without losing the calendar and the routine for four
+hours to say so.
+
+- **The expiry model is shared, not merely similar.** Both messages resolve
+  through the same server function (`resolveTimedMessages` → `resolveTimedMsg`,
+  keyed on the Settings key name) and expire through the same client function
+  (`activeTimedMsg`). Every bullet in "Focus — the safety model" above is true
+  of `gentle` word for word: server-resolved absolute instant, LA end-of-day
+  cap, blank-until → end of day, unparseable-until → end of day with a warning,
+  all-three-or-none (`timedMsg()`), and the client-side `forDate` belt-and-braces.
+- **It needs that model more than focus does, not less.** A wrong takeover is at
+  least sitting in front of whoever next walks into the room. A wrong gentle
+  message fades itself back in every few minutes, mostly when nobody is
+  watching. There is deliberately no lighter version of any guard.
+- **`focus` wins.** `momentBlockedBy()` returns `'focus'`, which suppresses every
+  moment including this one. Both cells filled in also pushes a `warnings` line,
+  because from the Sheet "suppressed" and "broken" look identical.
+- **No master switch.** Unlike `media`, the presence of the text *is* the switch.
+  A separate on/off cell would be one more thing to leave in the wrong position,
+  and the direction it would fail in is "still showing". It is also deliberately
+  **not** gated by `media` — that switch is about photographs, and a bad day for
+  images is not a reason to stop telling her where somebody is.
+- **Not in the photo caption.** The caption's whole contract is that it asserts
+  nothing (warmth/orientation only). A status message there would break it, so a
+  gentle message is its own kind of moment instead.
+- **Cadence floor 2 minutes** (`GENTLE_EVERY_MIN_FLOOR`, matching media's on
+  purpose — one overlay, one hard cap, no reason for one kind to be allowed
+  closer together than the other). Lowered to 2 on request: some circumstances
+  want a much steadier pulse than the 15-minute default. What bounds the feature
+  is `gentleUntil`, not the floor.
+
 ### Night
 
 **All three screens now dim at night.** The living areas keep the whole board;
@@ -445,6 +494,16 @@ does the board currently CLAIM", recomputed on every paint because that
 answer must always be current. A photo claims nothing, so it runs on its own
 timers instead, in `index.html`'s "PHOTO MOMENTS" section.
 
+**Since 2026-09-15 that machinery is shared.** A *moment* is now either a photo
+or a gentle message, and the two ride one scheduler, one overlay (`#moment`),
+one `momentState`, one hard cap and one interrupt check. Names follow: anything
+common to both is `moment*` (`momentBlockedBy`, `attemptMoment`, `endMoment`,
+`MOMENT_HARD_CAP_MS`), anything genuinely about photographs keeps `photo*`
+(`photoBlockedBy`, `pickNextPhoto`, `beginPhotoMoment`, `revealPhoto`).
+**Sharing the overlay is the collision model**: "two things rotating at once"
+is not a state that can be represented, so nothing arbitrates between them at
+paint time and nothing needs to.
+
 **Why it exists, and why every default leans conservative.** Added for
 warmth and connection, explicitly *not* to compete with the property doing
 most of the therapeutic work — the board's **constancy**. The person it
@@ -508,6 +567,33 @@ Four invariants, each with a specific failure it structurally prevents:
 
 ### Scheduling and selection
 
+**Two due-clocks, one timer.** The scheduler wakes at `momentEveryMin()` — the
+faster of the two cadences while a gentle message is live, the photo cadence
+otherwise — so a live message *tightens the whole rotation* rather than adding
+a second timer beside it. Each kind carries its own `*DueAt` stamp; a slot goes
+to whatever is due, and **a photo wins a tie** (it is the rarer event and there
+are only a handful of them; the message comes back round within minutes by
+construction, and its own due-time stays passed so it takes the very next slot).
+With no gentle message the whole thing degenerates exactly to the previous
+photo-only behaviour — that is what `MOMENT_DUE_SLACK` (0.8) is for: a due-time
+is set slightly short of the full cadence so a tick that jitters up to 15% early
+still counts as due, instead of silently costing that kind a whole cycle.
+
+A slot is allocated on "could this actually run", not merely "is it due" —
+otherwise a permanently-due-but-impossible photo (media off, empty pool, no
+eligible rows for this screen) would quietly eat every slot the message should
+have had.
+
+> **Due-times live on `Date.now()`, never `deviceNow()`.** A due-time is a
+> stopwatch — how long since the last one of these — so it belongs on the same
+> unskewed clock the scheduler itself runs on (`momentNextAt`, `momentLastAt`,
+> `shortIn`). The skewed clock is for deciding what is **true** (dates,
+> until-instants); the raw clock is for deciding what is **next**. Mixing them
+> is not a rounding error: `clockSkewMs` on a drifting Fire TV, or under a
+> `?now=` test hook, can be hours, which makes every due-time permanently past
+> and hands every slot to whichever kind is checked first. This was a real bug,
+> caught in the headless trace before it shipped.
+
 - Fires roughly every `mediaEveryMin` (default ~80, floor **2** — lowered
   20 → 10 → 2 on request; provisional the same way the night numbers
   are, a judgement call rather than a measured one — re-applied *after*
@@ -538,7 +624,7 @@ Four invariants, each with a specific failure it structurally prevents:
 
 ### Render
 
-`.photo` sits as the last child of `.stage`, `position:absolute;inset:0`,
+`.moment` sits as the last child of `.stage`, `position:absolute;inset:0`,
 opacity-transitioned rather than `[hidden]`-toggled (display cannot
 transition, and a smooth ~1s cross-fade needs the element present at
 opacity:0 throughout). Being out of the flex flow means showing or hiding it
@@ -602,16 +688,213 @@ entries for `?demo=1`: a small placeholder SVG (`media/demo-placeholder.svg`
 same-origin fetch rather than a mock) and a filename that genuinely does not
 exist, so the failure/skip path is exercised for real too, not simulated.
 
+## Check-ins
+
+Added 2026-09-15. Four buttons on her iPhone — morning medicine, evening
+medicine, shower, exercise. Each tap is a plain HTTPS GET to the same `/exec`
+endpoint, which appends one row to a new `Log` tab. The board reads them back
+as a row of four chips: grey with no time, green with a checkmark and the
+recorded time. They clear at midnight. The board stays read-only — she never
+touches the television.
+
+**Why this does not break "nothing is ever inferred from time passing."** That
+invariant forbids turning elapsed time into a claim that something happened,
+which is why routine items are never auto-greyed. This is the opposite of
+inferring: it is her own explicit confirmation, stamped by the server at the
+moment she made it. The board reports what she said. It must never start
+computing what she probably did.
+
+### The two guards that matter
+
+Everything else here is ordinary. These two are the feature.
+
+1. **Day-scoped, twice.** The block is shaped exactly like `dayRow` and carries
+   its own `forDate`; `todaysCheckIns()` returns `{}` unless that equals today,
+   so midnight empties the strip with no fetch and no network. Independently,
+   the server never sends anything but today's rows. It takes two separate
+   failures, not one, to show a stale green chip — and a stale green chip on
+   "Morning medicine" tells her she has taken a pill she has not taken.
+2. **First press of the day wins, and later presses are idempotent.** A second
+   tap returns the *first* timestamp and appends nothing. This is not an
+   optimisation; it is the interaction. Someone with a ten-to-fifteen-minute
+   memory window will press the button again *to check*, and the honest answer
+   is "yes, 8:20 AM", not a new row. Enforced under `LockService` so two
+   near-simultaneous taps cannot both append, and again on the read side, where
+   duplicate rows resolve to the earliest.
+
+### Copy — read this before editing a chip
+
+The strip carries a caption, **TODAY'S CHECK-INS**, and that caption is doing
+safety work rather than decoration. It scopes every chip under it to the
+*record* instead of the act: a grey "Morning medicine" means "no check-in
+recorded", not "you have not taken your medicine."
+
+No chip may ever contain:
+
+- **A negative statement** ("not taken", "missed", "due"). If she took the pill
+  and forgot to press, that is the double-dose risk from `BRIEF.md` running in
+  reverse, with the board causing it.
+- **An instruction** ("tap your phone"). An earlier draft had exactly that, and
+  it is wrong for the same reason: *"Evening medicine — tap your phone"* sitting
+  grey at 9am reads as a prompt to take the evening dose in the morning.
+  **Evening medicine grey all morning is normal and must not look like a
+  problem.**
+
+So the unpressed state is the name alone, in the board's ordinary muted ink,
+asserting nothing.
+
+### Where the strip lives, and what it costs — MEASURED
+
+It sits **inside the left column, between the routine and the notes** (Greg,
+2026-09-15). It began full width between `.grid` and the reassurance line, and
+that did not survive measurement: at 108px it drove TODAY'S ROUTINE to its 15px
+floor **and clipped it**, which is invariant 1. The measured cliff at full width
+was between 100px and 110px.
+
+Moving it into the left column changes the economics completely:
+
+- **The calendar is no longer charged anything.** The right column never sees
+  this element. Measured across every viewport and every routine length below,
+  `card-cal` resolves to *exactly* the same `--fs` with check-ins on and off.
+- The whole cost lands on the left column, paid for by two changes made in the
+  same pass: the routine's ceiling came down 10% (`ROUTINE_MAX` 28 → 25,
+  40 → 36), and the two-column threshold moved 6 → 4 (below).
+- The chips are ~160px wide instead of ~240px, so the caption went back *above*
+  the row rather than inline beside it. Inline it ate 95px of a 673px column,
+  14% of the width straight out of four already-narrow chips. A line of its own
+  costs ~23px of height and is the cheaper trade here — the opposite of the
+  answer when the strip was full width.
+
+Resolved `--fs`, ten-item routine (`notes` stayed at its 40px ceiling):
+
+| viewport | card | strip off | strip on |
+|---|---|---|---|
+| 1280×720 | today | 25px | 19px |
+| | cal | 24px | **24px** |
+| **1280×650** (real Silk) | today | 23px | 17px |
+| | cal | 22px | **22px** |
+| 1280×510 | today | 18px | *dropped* |
+| | cal | 18px | **18px** |
+
+**The two-column threshold moved 6 → 4, and it is not a concession.** Found while
+fitting the strip: at five and six items the left column was so saturated that
+the strip could not fit at *any* height, not even 30px. The cause was that the
+single-column path was rendering a five-item routine at 22px and a six-item one
+at 18px — both *below* the 25px ceiling two columns can hold, because one tall
+column must shrink to fit the card while two short ones need not. "Stays one
+column and stays large" had quietly stopped being true somewhere around five
+items, and nobody had re-measured it since the card's height last changed.
+
+Splitting earlier fixes three things at once, at 1280×650:
+
+| | before | after |
+|---|---|---|
+| 6-item routine, check-ins **off** | 18px | **25px** |
+| 6-item routine, check-ins **on** | strip could not fit at any height | strip fits, routine **still 25px** |
+| 6-item routine at 1280×510 | **clipped** (pre-existing) | no clip |
+
+That last row is a bug fix that predates this feature.
+
+**The strip still yields when there is no room.** `renderFull()` fits the cards,
+and if any of them still clips it hides the strip and re-fits. Deliberately a
+measurement, not a viewport threshold or an item-count rule — both would be
+guesses about content nobody has typed. `?debug=1` prints `DROPPED(no room)` so
+this is never silent to whoever is watching through the camera.
+
+Swept against routine length at 1280×650 (today's `--fs`, off → on):
+
+| items | 6 | 8 | 10 | 12 | 15 |
+|---|---|---|---|---|---|
+| strip | 73px | 73px | 73px | **dropped** | **dropped** |
+| today | 25 → 25 | 25 → 21 | 23 → 17 | 19 → 19 | 15 → 15 |
+
+So: **no cost at all up to six items**, a few px from seven to ten, and on a
+twelve-or-more-item day the strip stands down rather than squeezing the routine.
+Her routine is normally well inside that range. The remaining honest cost is
+that on a long-routine day the strip is absent — which is why placement is still
+listed under Open questions rather than closed.
+
+### Night palette — a latent hazard, now fixed
+
+`--ok-bg` / `--ok-ink` / `--ok-edge` had **no night values**. They had been
+dormant since the medication card was removed, so nothing rendered them. The
+first green chip after 8pm would have put `#e3f1e4` — a near-white panel — on
+the living room's dark board, appearing for the first time on an evening nobody
+was testing. Night values are now defined alongside the rest of the palette.
+Green is kept rather than folded into the amber: the hue is the meaning, and
+the palette's stated rule bans white and blue, not colour. Luminance is matched
+to `--soft`. Provisional like every other number in that block.
+
+### Refresh rate — what the measurement actually said
+
+The instinct was to poll the table display every 60s so a press shows up
+quickly. Measured first, as instructed: `/exec` takes **4.0–8.5s per call**, of
+which ~0.08s is network. Essentially all of it is Google-side time, against a
+consumer account's 90-minutes-a-day script runtime cap.
+
+| | calls/day | vs today |
+|---|---|---|
+| today — 3 screens @ 180s | 1,440 | — |
+| table @ 60s + 2 @ 180s | 2,400 | 1.67× |
+| **table @ 120s + 2 @ 180s** | **1,680** | **1.17×** |
+
+At anything like the measured per-call cost, 1,440 calls/day is already the
+same order as the cap; the likely reason it has never bitten is that the Fire
+TVs sleep, not that there is headroom. **The billed number is not visible from
+outside** — it is in Apps Script's own Executions view.
+
+So the table ships at **120s, not 60s**: most of the benefit (worst-case
+staleness 180s → 120s) for a 17% load increase instead of 67%. Going to 60s
+later is editing one constant, once that dashboard has been read. The real fix
+is cheaper reads — `doGet` currently `getDataRange()`s every tab on every call,
+including `Days` and `Events`, which change a few times a week.
+
+`BEAT_MIN_GAP_MS` went 45s → 150s in the same change, so the faster-polling
+screen writes its heartbeat about as often as it did before. The faster board
+costs no extra Sheet *writes* at all.
+
+### Shape of the endpoint
+
+Write branch, taken before any read work — a bound web app has one entry point,
+and a check-in must not pay for the whole board's read when a phone is waiting
+on a notification:
+
+```
+GET /exec?log=medicine-am&k=TOKEN
+{ "ok": true,  "kind": "medicine-am", "already": false, "at": "8:20 AM" }
+{ "ok": true,  "kind": "medicine-am", "already": true,  "at": "8:20 AM" }
+{ "ok": false, "error": "unauthorized" | "unknown kind" | "no log tab" | "busy" }
+```
+
+- **Token** from `PropertiesService` script properties, never from the file —
+  the repo is public. A *missing* property rejects every write rather than
+  defaulting to open.
+- **Fixed kind allowlist.** No dynamic kinds; a fifth kind would write rows the
+  board never renders.
+- **Tail read, never `getDataRange()`.** `Log` is the only tab that grows
+  without bound (~4 rows/day forever). 80 rows is 20 days of normal use, and
+  the cost of the read stays flat in year three.
+
+Read path adds `log` (keyed by kind, epoch ms, today only) and `logForDate`.
+
 ## Deliberate departures from BRIEF.md
 
 Each of these was a decision, not an oversight. Do not "restore" them without
 asking.
 
-1. **The medication card was removed.** The brief calls medication the
-   safety-critical feature (risk of double-dosing). It was cut because she has
-   in-person support who administers it. The CSS colour tokens (`--ok-*`,
-   `--soon-*`) are still in the file so it can be restored cheaply if the care
-   arrangement changes. **Revisit this if support ends.**
+1. **The medication *card* was removed — but medication is back, as a
+   self-confirmed check-in.** The brief calls medication the safety-critical
+   feature (risk of double-dosing). The card was cut because she has in-person
+   support who administers it, and it stays cut: there is no medication
+   *status*, nothing computes whether a dose is due, and nothing turns the
+   clock into a claim.
+   What exists instead (2026-09-15) is two of the four check-in chips — she
+   presses a button on her phone and the board reports the time she pressed it.
+   That is a record of something she said, not a judgement about something she
+   should do. See "Check-ins" below, and read the copy rules there before
+   changing a single word on those two chips.
+   `--ok-*` is now live as the pressed state. `--soon-*` is still dormant.
+   **Revisit the full card only if in-person support ends.**
 2. **No meals section, no IMPORTANT section.** Same reasoning: redundant with
    in-person support.
 3. **TODAY is a routine, not a task list.** It describes the shape of her day
@@ -654,7 +937,9 @@ asking.
 - **The server's clock wins.** `clockSkewMs` is taken from the endpoint and used
   for the displayed time, which day's row to show, night-window switching **and**
   focus expiry, so a drifting Fire TV clock cannot display the wrong day or go
-  dark at the wrong hour.
+  dark at the wrong hour. The converse also holds and is just as load-bearing:
+  **scheduling intervals use the raw `Date.now()`**, never the skewed clock —
+  see the due-clock note under "Scheduling and selection".
 - **Nothing is ever inferred from time passing.** A passed time is not evidence
   something happened. This is why routine items are never auto-greyed, and why
   the `Status` tab's "Ago" is a live formula rather than text written once.
@@ -663,9 +948,19 @@ asking.
 - **Observability never blocks the thing observed.** The heartbeat write is
   skipped — never queued — if another display holds the lock, and every failure
   path in it degrades to a warning. The board gets its data regardless.
+- **A check-in block is only ever shown for its own date.** `todaysCheckIns()`
+  is the single reader and it compares `forDate` to today on every call. Do not
+  add a second path that reads `logRow.kinds` directly — the guard is the
+  feature, and a stale green medication chip is the one thing on this board
+  that could actually hurt someone.
+- **One moment at a time, structurally.** One scheduler, one overlay, one
+  `momentState`, and `attemptMoment()` returns immediately unless that state is
+  `idle`. This is what makes "a photo and a gentle message could collide"
+  unrepresentable rather than merely unlikely. If a third kind of moment is ever
+  added, add it to the same scheduler — never give it its own timer.
 - **A wrong-in-the-safe-direction overlay always has an independent hard
-  backstop.** A focus takeover's until-instant, a photo moment's
-  `PHOTO_HARD_CAP_MS` — both guarantee the board returns to its baseline by a
+  backstop.** A focus takeover's until-instant, a moment's
+  `MOMENT_HARD_CAP_MS` — both guarantee the board returns to its baseline by a
   mechanism that does not depend on the "normal" path working correctly. When
   adding anything else that temporarily covers the board, give it the same
   property and prove it the same way: deliberately break the normal teardown
@@ -688,13 +983,16 @@ asking.
   "today", and the line is **dropped** once the date passes. This replaced a
   hand-typed "Greg here for 13 more days", which is wrong the next day and
   nobody notices. Countdowns are always stored as dates.
-- A **focus message with an until-instant is dated information** and expires by
-  absolute comparison, with no network and without a fetch. One exception to the
+- A **focus *or gentle* message with an until-instant is dated information**
+  (they share `activeTimedMsg()`) and expires by absolute comparison, with no network and without a fetch. One exception to the
   `{days:}` rule inside it: an expired token does *not* drop the whole message,
   because the message is already dated by its until-instant and suppressing an
   acute statement over one stale token would be the wrong failure. Only an
   expansion to nothing means there is nothing to say — and then there is no
-  takeover at all.
+  takeover at all. A gentle message additionally expires **mid-hold**: the
+  once-a-second interrupt re-checks its until-instant, so it is pulled off the
+  screen at its deadline rather than being allowed to finish a hold it has
+  stopped being true for.
 
 ## Verified vs. not
 
@@ -784,6 +1082,29 @@ with stubbed Apps Script globals):
 - Shuffle-without-immediate-repeat verified across 20 consecutive picks from
   a 2-photo pool; the `Screens` allow-list verified to include/exclude
   exactly the rows it should for a given screen.
+**Verified for gentle messages** (headless Chrome, single-load traces over
+compressed virtual time, plus four rendered states):
+- **Interleaving with photos**, traced slot by slot over ~50 virtual minutes at
+  `gentleEveryMin=5` / `mediaEveryMin=20`: the message took ~4.5-minute turns
+  and photos landed at ~4.5 / 21.9 / 41.8 min, i.e. each kind held its own
+  cadence and neither starved the other.
+- **No regression to the photo-only path**: with no gentle message, photos still
+  fire at the plain `mediaEveryMin` cadence and the first one still lands one
+  cadence after boot, as before.
+- **Suppressed correctly**: bedroom in night mode reports `skipped: night` and
+  shows nothing; an active `focus` suppresses it and `?debug=1` reads
+  `GENTLE live [focus]`, distinguishing "suppressed" from "broken".
+- **Not suppressed by `media=off`**, by design — the message still rotates.
+- **Mid-hold expiry**: shown at 1:04 PM with a 60s hold and `gentleUntil=1:05
+  PM`, it was faded at 1:05 (`gentle live=NO`) rather than finishing the hold,
+  and the overlay tore down clean (`moment-msg` emptied).
+- Rendered and read at 1280×650: a long message wraps to three lines at the 96px
+  ceiling without clipping; a short one sits with air around it, visibly smaller
+  than the same text as a takeover.
+- **Not verified**: whether 15 min / 20 s / 96px are the right *numbers*. Those
+  are judgement calls about a real room and a real person, exactly like the night
+  ceiling — see Open questions.
+
 - (Superseded 2026-09-14: the bedroom now arms the timer like every other
   screen and is gated by night mode only — verified day shows, night refuses,
   and a photo up at the night boundary fades.)
@@ -871,10 +1192,35 @@ with stubbed Apps Script globals):
   day. Typing `8:00 am Breakfast` and styling the time would let her answer
   "what's next" against the clock, without the board claiming anything is done.
 - **Medication**, if the support arrangement changes.
+- **Where the check-in strip goes.** Now in the left column between the routine
+  and the notes, which costs the calendar nothing and costs the routine nothing
+  up to six items. It still stands down on a twelve-or-more-item routine. The
+  remaining untried placement is the RIGHT column under the calendar, which
+  would spend the calendar's slack instead — worth trying only if long-routine
+  days turn out to be common enough that the strip disappearing is a nuisance.
+  See "Where the strip lives".
+- **Whether the check-in chips earn their height at all.** The phone already
+  shows a notification with the recorded time; the board is a second, slower
+  confirmation. If the strip keeps costing the routine 5px of type, the honest
+  question is whether it is worth it — which is a question about her, in the
+  room, not one headless can answer.
 - **Per-screen focus.** v1 is global: one takeover on every display. A second
   tab (`Focus`, one row per screen) would make it targetable — "Greg stepped
   out" is more useful in the living room than in an empty bedroom. Not built,
-  and not worth building until the global one has been used a few times.
+  and not worth building until the global one has been used a few times. The
+  same applies to `gentle`, and more so: a message coming round every fifteen
+  minutes in a room nobody is in is pure wear on the board's constancy.
+- **Whether a gentle message should keep the header.** It currently covers the
+  whole stage like a photo does, so the date and clock go with it for ~20s.
+  Leaving the header visible would put "back around 4:00" next to the actual
+  time, which is exactly the comparison she cannot make from memory. It needs
+  the overlay to start below the header rather than at `inset:0`, so it is a
+  real change, not a tweak — worth doing only if the full-bleed version reads
+  as too much of an interruption in the room.
+- **The three gentle numbers** — 15 min, 20 s, 96px — are starting points
+  chosen the same way `MSG_MAX_NIGHT` was, and want the same treatment: look at
+  them in the room, on the panel, with a real message. Headless proved the
+  mechanics, not the judgement.
 - **Whether the night message should ever change through the night.** It is one
   constant string now, which is the safe version. "It's very early, go back to
   sleep" at 2am versus "it's nearly morning" at 5:30 would be more useful and
