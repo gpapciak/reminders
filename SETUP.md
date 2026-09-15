@@ -433,16 +433,46 @@ the limitations at the end of this section.
 The `/exec` URL is public, so the buttons need a password of sorts. It is
 **not** stored in the code, because the code is in a public repository.
 
-1. In the Sheet: **Extensions → Apps Script**
-2. **Project Settings** (the gear on the left)
-3. Scroll to **Script properties → Add script property**
-4. Property: `LOG_TOKEN`
-5. Value: a long random string you make up — say 20+ characters of letters and
-   numbers. Keep a copy; you need it in step 4.
-6. **Save script properties**
+**Pick a token first.** 20+ characters of letters and numbers, no spaces and no
+punctuation — it travels in a URL. Write it down somewhere you will still have
+it in a year; you need it once here and once per Shortcut, and there is no way
+to read it back out of Apps Script afterwards.
+
+1. Open the Sheet → **Extensions → Apps Script**
+2. In the **left sidebar**, click the **gear icon** (⚙️ *Project Settings*) — it
+   is below the `< >` editor icon, not inside the code editor
+3. Scroll to the bottom, to **Script Properties**
+4. Click **Add script property** (if you have set properties before, the button
+   says **Edit script properties** first)
+5. **Property:** `LOG_TOKEN` — exactly that, capitals and underscore
+6. **Value:** your token
+7. Click **Save script properties**
+
+**This takes effect immediately.** Script properties are read when the script
+runs, so unlike a code change this needs no redeploy — you can set it before or
+after publishing and it works either way.
+
+**To check it took**, once the script has been redeployed (§6), paste this into
+a browser with a *deliberately wrong* token:
+
+```
+https://script.google.com/macros/s/AKfycbxWpXuqZTXYxlk1gP8JtvML1tDoajdAK5nckcoO_uLMZlwZr6e8yt7SAt0CzWFEQE2A/exec?log=shower&k=definitely-wrong
+```
+
+You should get back exactly:
+
+```json
+{"ok":false,"error":"unauthorized"}
+```
+
+That one line proves three things at once: the redeploy landed, the endpoint is
+reading the property, and the lock is shut. Then try it again with the **real**
+token — you should get `{"ok":true,...}` — and **delete that test row from the
+`Log` tab afterwards**, or the board will show a green Shower chip all day.
 
 > If this property is missing, **every** button press is rejected. That is
-> deliberate: an unconfigured board must be closed, not open.
+> deliberate: an unconfigured board must be closed, not open. The symptom is
+> that every Shortcut shows the failure notification.
 
 ### 3. Turn the chips on
 
@@ -464,38 +494,82 @@ That is worth knowing because of what it removes: no session that can expire, no
 app update that changes a login screen, no permission dialog she has to
 interpret months from now.
 
-**Build each one like this** (Shortcuts app → **+**):
+**Build ONE of them completely, test it, then duplicate it three times.** Only
+the URL and one word of the notification change between them, and duplicating
+is far less error-prone than building the same six actions four times on a
+phone keyboard.
 
-1. **Get Contents of URL** — method GET, URL:
+#### Building the first one
 
-   ```
-   https://script.google.com/macros/s/AKfycbxWpXuqZTXYxlk1gP8JtvML1tDoajdAK5nckcoO_uLMZlwZr6e8yt7SAt0CzWFEQE2A/exec?log=medicine-am&k=YOUR_TOKEN
-   ```
+Open **Shortcuts** → tap **+** (top right).
 
-2. **Get Dictionary Value** — key `ok`, from the contents above
-3. **If** → *Otherwise* → **End If**, with a **Show Notification** in each branch
+**Name it.** Tap the shortcut's name at the top (or the **⌄** next to it) →
+**Rename** → `Morning Medicine`.
 
-The four URLs differ only in `log=`:
+**Action 1 — Get Contents of URL.** Tap the search box at the bottom, type
+`url`, choose **Get Contents of URL**. Tap the blue **URL** field and paste:
 
-| Shortcut name | `log=` |
-|---|---|
-| Morning Medicine | `medicine-am` |
-| Evening Medicine | `medicine-pm` |
-| Shower | `shower` |
-| Exercise | `exercise` |
+```
+https://script.google.com/macros/s/AKfycbxWpXuqZTXYxlk1gP8JtvML1tDoajdAK5nckcoO_uLMZlwZr6e8yt7SAt0CzWFEQE2A/exec?log=medicine-am&k=YOUR_TOKEN
+```
 
-**The notification is the whole interaction**, so it has to say which of three
-things happened. A Shortcut that fails silently is worse than no Shortcut at
-all — she would have no way to know, and would tap again.
+Replace `YOUR_TOKEN` with the token from §5a step 2. Leave **Method** as `GET`
+and do not add headers or a body — tap the **⌄** to confirm it says GET if you
+want to check.
 
-| What happened | What she should see |
-|---|---|
-| Recorded | `Recorded — Morning medicine, 8:20 AM` |
-| Already recorded today | `Already recorded at 8:20 AM` |
-| Anything went wrong | `Couldn't record — try again in a minute` |
+**Action 2 — Get Dictionary Value.** Search `dictionary`, choose **Get
+Dictionary Value**. It will read *Get **Value** for **Key** in **Contents of
+URL***. Tap the **Key** field and type `at` — exactly that, lowercase. Leave
+"Value" and "Contents of URL" alone; Shortcuts fills the last part in for you.
 
-To build those three messages, read `already` and `at` out of the reply with two
-more **Get Dictionary Value** steps. The reply always looks like one of:
+**Action 3 — If.** Search `if`, choose **If**. It appears as
+*If **Dictionary Value*** with an **If / Otherwise / End If** block. Set the
+condition to **has any value**. (Tap the grey condition word to change it.)
+
+**Action 4 — Show Notification**, dragged INSIDE the `If`. Search `notification`,
+choose **Show Notification**. Type:
+
+> `Morning medicine — recorded at `
+
+then, without leaving the text field, tap the **Dictionary Value** variable
+chip from the variable bar above the keyboard so the line ends with the time.
+
+**Action 5 — Show Notification**, inside the **Otherwise** branch. Type:
+
+> `Couldn't record — try again in a minute`
+
+That is the whole shortcut. Five actions:
+
+```
+Get Contents of URL          .../exec?log=medicine-am&k=TOKEN
+Get Dictionary Value         Value for "at" in Contents of URL
+If                           Dictionary Value has any value
+    Show Notification        Morning medicine - recorded at [Dictionary Value]
+Otherwise
+    Show Notification        Couldn't record - try again in a minute
+End If
+```
+
+**Why branch on `at` rather than on `ok`.** Every successful reply carries a
+time, and a failed one carries none, so one test covers everything. It also
+reads correctly on a *repeat* press: the reply then holds the FIRST time, so
+"recorded at 8:20 AM" is true whether she pressed once or five times — which is
+exactly what someone checking "did I already do that?" needs to be told.
+
+#### Then duplicate it
+
+Long-press the finished shortcut → **Duplicate** → rename → open it and change
+**two** things: the `log=` word in the URL, and the first word of the
+notification.
+
+| Shortcut name | `log=` | Notification starts |
+|---|---|---|
+| Morning Medicine | `medicine-am` | `Morning medicine — recorded at ` |
+| Evening Medicine | `medicine-pm` | `Evening medicine — recorded at ` |
+| Shower | `shower` | `Shower — recorded at ` |
+| Exercise | `exercise` | `Exercise — recorded at ` |
+
+The reply always looks like one of these, which is what the shortcut is reading:
 
 ```
 { "ok": true,  "kind": "medicine-am", "already": false, "at": "8:20 AM" }
@@ -508,13 +582,38 @@ second event — it answers with the *first* time. That is on purpose: checking
 "did I already do that?" by pressing the button again is exactly what she will
 do, and it has to give the right answer.
 
-Put all four on her home screen, or use a single Shortcuts widget with four
-buttons — try the widget first, it saves a tap.
+#### Optional: say "already" explicitly
+
+If you would rather the repeat press be spelled out, add two actions between 2
+and 3: a second **Get Dictionary Value** for key `already`, and a nested **If**
+on it inside the success branch, with `Already recorded at [time]` in one arm
+and `Recorded — Morning medicine, [time]` in the other. Test the condition on
+the real phone before trusting it — how Shortcuts compares a JSON `true` has
+varied between iOS versions, which is the reason the version above avoids
+booleans entirely.
+
+#### Putting them on her phone
+
+**A widget is worth trying first** — it puts all four on the home screen with no
+folder to open. Put the four shortcuts in a folder first (Shortcuts → the
+sidebar → **New Folder** → `Check-ins`), then long-press the home screen → **+**
+→ **Shortcuts** → the **medium** (4-slot) widget → **Add Widget**, then tap the
+widget and point it at the `Check-ins` folder.
+
+**Or as four icons:** open a shortcut → **⌄** → **Add to Home Screen**.
+
+**Sound.** Each **Show Notification** action has a **Play Sound** toggle. The
+board is deliberately silent, but the phone is not the board — a sound here is
+useful confirmation. Your call.
 
 > **One thing to verify on the real phone:** `/exec` bounces the request to a
 > second address (`googleusercontent.com`) before answering. Shortcuts normally
 > follows that automatically, but it has not been tested on her handset. If the
 > notification never shows a time, that redirect is the first thing to suspect.
+
+> **If the network is down**, *Get Contents of URL* fails outright and iOS shows
+> its own error banner instead of the "Couldn't record" message. Not silent, but
+> not our wording either — worth knowing so it is not mistaken for a bug.
 
 ### Run each Shortcut once, during setup
 
@@ -523,7 +622,14 @@ to `script.google.com`. That prompt is exactly what she should never have to
 answer — and it appears **once per Shortcut**.
 
 **So run all four yourself during setup and approve the prompt then.** Four taps
-buys a permanently clean interaction afterwards.
+buys a permanently clean interaction afterwards. The prompt reads *"Allow
+&lt;shortcut&gt; to send data to script.google.com?"* — choose **Allow Always** if it
+is offered, **Allow** otherwise.
+
+While you are there, this is also the test: each of the four should show a
+notification with a real time in it. Then **delete those four test rows from the
+`Log` tab**, or her board will start the day with four green chips she did not
+earn.
 
 This decides *where* setup happens. Building the Shortcuts on another phone and
 sending them across works, but it puts that prompt back in front of her the
