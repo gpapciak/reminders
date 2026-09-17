@@ -631,11 +631,18 @@ notification with a real time in it. Then **delete those four test rows from the
 `Log` tab**, or her board will start the day with four green chips she did not
 earn.
 
-This decides *where* setup happens. Building the Shortcuts on another phone and
-sending them across works, but it puts that prompt back in front of her the
-first time she uses each one. Build them **on her phone** — which in practice
-means Greg on the laptop reading this out, and whoever is with her holding the
-handset.
+**Where you BUILD them does not matter; where you RUN them does.** An earlier
+version of this page said to build them on her phone, which is more painful than
+it needs to be and was not quite right: the grant is per-shortcut *and*
+per-device, and sharing a shortcut does not carry it across. So the prompt has to
+be answered on her handset either way, and nothing is gained by typing a
+150-character URL four times on someone else's phone.
+
+Build all four wherever there is a real keyboard — your own iPhone, or a Mac —
+then share them over (shortcut → **⌄** → **Share** → AirDrop or iCloud link) and
+run each one once on her phone. Per the established two-person pattern: Greg
+building and sharing, whoever is with her tapping each one once and answering
+the prompt.
 
 ### Two honest limitations
 
