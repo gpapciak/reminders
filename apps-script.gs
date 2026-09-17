@@ -36,6 +36,16 @@ var BEAT_MIN_GAP_MS = 150000;
    She taps a button on her phone; that tap appends one row here. The board
    reads them back and shows four chips. See the Log section further down. */
 var LOG_KINDS = ['medicine-am', 'medicine-pm', 'shower', 'exercise'];
+/* How each kind is SPOKEN, for the notification on her phone. Lives here and
+   not in the Shortcut because a Shortcut cannot be redeployed remotely: if this
+   wording ever needs to change, changing it here changes all four phones'
+   notifications at once, with no phone in hand. See fmt=text below. */
+var LOG_LABELS = {
+  'medicine-am': 'Morning medicine',
+  'medicine-pm': 'Evening medicine',
+  'shower':      'Shower',
+  'exercise':    'Exercise'
+};
 /* Read only the TAIL of the Log tab, never getDataRange(). doGet is polled by
    every display all day and this tab is the only one that grows without bound
    — ~4 rows/day forever. 80 rows is 20 days of normal use, so today's rows are
@@ -338,12 +348,54 @@ function settingValue(v, tz) {
  * timezone from a Date cell. Both are written in one append.
  */
 
-/** The JSON a Shortcut gets back. Small and STABLE — the phone parses it, and
- *  a Shortcut cannot be redeployed remotely the way this script can. */
+/** The JSON a caller gets back. Small and STABLE — anything parsing it cannot
+ *  be redeployed remotely the way this script can. */
 function logJson(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * ?fmt=text — the same answer as one finished English sentence, ready to be
+ * shown verbatim.
+ *
+ * WHY THIS EXISTS. The JSON above is the honest machine answer, but the only
+ * thing consuming it is an iOS Shortcut, and assembling a sentence there costs
+ * five actions: read a dictionary key, branch on it, and paste a variable into
+ * two notification strings — built four times, by hand, on a phone keyboard,
+ * by someone who does not write software. Every one of those steps is a place
+ * to mistype a key name and get a notification that silently says nothing.
+ *
+ * The server already knows the kind, the time, and whether it was a repeat. So
+ * it says the sentence, and the Shortcut becomes: fetch this, show that. Two
+ * actions, nothing to get wrong, and the wording stays changeable from here
+ * rather than needing four phones back.
+ *
+ * The error text is deliberately HER error text, not the technical one — she
+ * is the one who reads it. Drop &fmt=text from the URL to see the real reason
+ * ("unauthorized", "no log tab") when something needs diagnosing.
+ */
+function logText(obj) {
+  var msg;
+  if (obj && obj.ok) {
+    var label = LOG_LABELS[obj.kind] || obj.kind;
+    msg = obj.already
+        ? label + ' — already recorded at ' + obj.at
+        : label + ' — recorded at ' + obj.at;
+  } else {
+    msg = "Couldn't record — try again in a minute";
+  }
+  return ContentService
+    .createTextOutput(msg)
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
+/** One place decides which of the two shapes goes back, so every return path
+ *  in handleLogWrite() gets it without having to remember. */
+function logReply(e, obj) {
+  var fmt = String((e && e.parameter && e.parameter.fmt) || '').toLowerCase();
+  return (fmt === 'text') ? logText(obj) : logJson(obj);
 }
 
 function handleLogWrite(e) {
@@ -361,17 +413,17 @@ function handleLogWrite(e) {
        makes a timing oracle here a fiction. The honest threat model is written
        down in SETUP.md — this stops accidents and casual pokes, not somebody
        who has the URL and the token. */
-    if (!token || given !== token) return logJson({ ok: false, error: 'unauthorized' });
+    if (!token || given !== token) return logReply(e, { ok: false, error: 'unauthorized' });
 
     var kind = String(e.parameter.log || '').trim().toLowerCase();
     /* A fixed allowlist, never a dynamic kind. The board renders four chips
        from its own matching list; a fifth kind here would write rows nothing
        ever displays, which is worse than refusing. */
-    if (LOG_KINDS.indexOf(kind) < 0) return logJson({ ok: false, error: 'unknown kind' });
+    if (LOG_KINDS.indexOf(kind) < 0) return logReply(e, { ok: false, error: 'unknown kind' });
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sh = ss.getSheetByName('Log');
-    if (!sh) return logJson({ ok: false, error: 'no log tab' });
+    if (!sh) return logReply(e, { ok: false, error: 'no log tab' });
 
     var lock = LockService.getScriptLock();
     /* Waited on, not skipped — the opposite of the heartbeat's policy, and for
@@ -379,17 +431,17 @@ function handleLogWrite(e) {
        one is three minutes away; a dropped check-in is the entire interaction
        failing in her hand. 10s is longer than any append can take and still
        short enough to return an honest "try again" rather than hanging. */
-    if (!lock.tryLock(10000)) return logJson({ ok: false, error: 'busy' });
+    if (!lock.tryLock(10000)) return logReply(e, { ok: false, error: 'busy' });
     try {
-      return logJson(appendCheckIn(sh, kind));
+      return logReply(e, appendCheckIn(sh, kind));
     } finally {
       lock.releaseLock();
     }
 
   } catch (err) {
     /* Never an exception out of this branch: the phone shows a notification
-       built from this JSON, and a 500 would give her a blank one. */
-    return logJson({ ok: false, error: String((err && err.message) || err) });
+       built from this reply, and a 500 would give her a blank one. */
+    return logReply(e, { ok: false, error: String((err && err.message) || err) });
   }
 }
 

@@ -896,7 +896,25 @@ GET /exec?log=medicine-am&k=TOKEN
 { "ok": true,  "kind": "medicine-am", "already": false, "at": "8:20 AM" }
 { "ok": true,  "kind": "medicine-am", "already": true,  "at": "8:20 AM" }
 { "ok": false, "error": "unauthorized" | "unknown kind" | "no log tab" | "busy" }
+
+GET /exec?log=medicine-am&k=TOKEN&fmt=text
+Morning medicine — recorded at 8:20 AM
+Morning medicine — already recorded at 8:20 AM
+Couldn'''t record — try again in a minute
 ```
+
+**`fmt=text` exists because the only consumer is an iOS Shortcut** (2026-09-16).
+Assembling that sentence on the phone costs five actions — read a dictionary
+key, branch on it, paste a variable into two notification strings — built four
+times by hand on a phone keyboard, with a mistyped key name silently producing
+a notification that says nothing. The server already knows the kind, the time
+and whether it was a repeat, so it says the sentence and the Shortcut becomes
+fetch-this-show-that. It also keeps the wording changeable from the script
+rather than needing four phones back.
+
+The error text under `fmt=text` is deliberately HERS, not the technical one;
+drop the parameter to get the real reason when diagnosing. `LOG_LABELS` holds
+the spoken name of each kind.
 
 - **Token** from `PropertiesService` script properties, never from the file —
   the repo is public. A *missing* property rejects every write rather than

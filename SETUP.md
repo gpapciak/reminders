@@ -501,96 +501,109 @@ phone keyboard.
 
 #### Building the first one
 
-Open **Shortcuts** → tap **+** (top right).
+**Shortcuts is an iPhone app** — grey icon, four coloured shapes. It is already
+installed. It is not a website, and there is no Windows version, so this part
+cannot be done on the laptop.
 
-**Name it.** Tap the shortcut's name at the top (or the **⌄** next to it) →
-**Rename** → `Morning Medicine`.
+Open **Shortcuts** → tap **+** (top right). You are now in the editor: a blank
+shortcut with a search box at the bottom.
 
-**Action 1 — Get Contents of URL.** Tap the search box at the bottom, type
-`url`, choose **Get Contents of URL**. Tap the blue **URL** field and paste:
+**Name it.** Tap the name at the very top (it says *New Shortcut*) → **Rename**
+→ type `Morning Medicine` → **Done**.
 
-```
-https://script.google.com/macros/s/AKfycbxWpXuqZTXYxlk1gP8JtvML1tDoajdAK5nckcoO_uLMZlwZr6e8yt7SAt0CzWFEQE2A/exec?log=medicine-am&k=YOUR_TOKEN
-```
+---
 
-Replace `YOUR_TOKEN` with the token from §5a step 2. Leave **Method** as `GET`
-and do not add headers or a body — tap the **⌄** to confirm it says GET if you
-want to check.
+**Action 1 — fetch the URL.**
 
-**Action 2 — Get Dictionary Value.** Search `dictionary`, choose **Get
-Dictionary Value**. It will read *Get **Value** for **Key** in **Contents of
-URL***. Tap the **Key** field and type `at` — exactly that, lowercase. Leave
-"Value" and "Contents of URL" alone; Shortcuts fills the last part in for you.
+In the search box at the bottom, type `contents`. Tap **Get Contents of URL**.
 
-**Action 3 — If.** Search `if`, choose **If**. It appears as
-*If **Dictionary Value*** with an **If / Otherwise / End If** block. Set the
-condition to **has any value**. (Tap the grey condition word to change it.)
+A card appears reading **Get Contents of** ***URL***, where *URL* is blue.
 
-**Action 4 — Show Notification**, dragged INSIDE the `If`. Search `notification`,
-choose **Show Notification**. Type:
-
-> `Morning medicine — recorded at `
-
-then, without leaving the text field, tap the **Dictionary Value** variable
-chip from the variable bar above the keyboard so the line ends with the time.
-
-**Action 5 — Show Notification**, inside the **Otherwise** branch. Type:
-
-> `Couldn't record — try again in a minute`
-
-That is the whole shortcut. Five actions:
+Tap that blue **URL** word. The keyboard opens. Paste:
 
 ```
-Get Contents of URL          .../exec?log=medicine-am&k=TOKEN
-Get Dictionary Value         Value for "at" in Contents of URL
-If                           Dictionary Value has any value
-    Show Notification        Morning medicine - recorded at [Dictionary Value]
-Otherwise
-    Show Notification        Couldn't record - try again in a minute
-End If
+https://script.google.com/macros/s/AKfycbxWpXuqZTXYxlk1gP8JtvML1tDoajdAK5nckcoO_uLMZlwZr6e8yt7SAt0CzWFEQE2A/exec?log=medicine-am&k=YOUR_TOKEN&fmt=text
 ```
 
-**Why branch on `at` rather than on `ok`.** Every successful reply carries a
-time, and a failed one carries none, so one test covers everything. It also
-reads correctly on a *repeat* press: the reply then holds the FIRST time, so
-"recorded at 8:20 AM" is true whether she pressed once or five times — which is
-exactly what someone checking "did I already do that?" needs to be told.
+**Do not go looking for the Method setting.** It is hidden behind a small grey
+**Show More** at the bottom of that card, and it is already **GET**, which is
+what we want. Leave the card alone. (Open *Show More* only if you want to see
+it; then tap **Show Less** and change nothing.)
 
-#### Then duplicate it
+---
 
-Long-press the finished shortcut → **Duplicate** → rename → open it and change
-**two** things: the `log=` word in the URL, and the first word of the
-notification.
+**Action 2 — show what came back.**
 
-| Shortcut name | `log=` | Notification starts |
-|---|---|---|
-| Morning Medicine | `medicine-am` | `Morning medicine — recorded at ` |
-| Evening Medicine | `medicine-pm` | `Evening medicine — recorded at ` |
-| Shower | `shower` | `Shower — recorded at ` |
-| Exercise | `exercise` | `Exercise — recorded at ` |
+Search `notification`. Tap **Show Notification**.
 
-The reply always looks like one of these, which is what the shortcut is reading:
+The card reads **Show Notification** with a text box containing *Hello World*.
+
+1. Tap the words **Hello World** and delete them.
+2. Just above the keyboard is a bar of blue variable chips. Tap the one that
+   says **Contents of URL**.
+
+The card should now read **Show Notification** *Contents of URL*. That is the
+whole shortcut:
 
 ```
-{ "ok": true,  "kind": "medicine-am", "already": false, "at": "8:20 AM" }
-{ "ok": true,  "kind": "medicine-am", "already": true,  "at": "8:20 AM" }
-{ "ok": false, "error": "unauthorized" }
+Get Contents of URL      .../exec?log=medicine-am&k=TOKEN&fmt=text
+Show Notification        [Contents of URL]
 ```
+
+Tap **Done**.
+
+**That is it — two actions.** No dictionary, no If, nothing to branch on. The
+`&fmt=text` on the end is what makes this possible: the server sends back a
+finished sentence rather than data to assemble, so the phone's only job is to
+show it. What she sees is one of:
+
+> Morning medicine — recorded at 8:20 AM
+> Morning medicine — already recorded at 8:20 AM
+> Couldn't record — try again in a minute
+
+including the wording for a failure, which is the case a hand-built shortcut is
+most likely to get wrong.
+
+**Test it now** — tap the ▷ play button at the bottom of the editor. You should
+get a notification with a real time in it. Then **delete that row from the
+`Log` tab.**
+
+---
+
+#### Then duplicate it three times
+
+From the Shortcuts list, long-press **Morning Medicine** → **Duplicate** →
+long-press the copy → **Rename**. Open it and change **one thing**: the word
+after `log=` in the URL.
+
+| Shortcut name | change `log=` to |
+|---|---|
+| Morning Medicine | `medicine-am` |
+| Evening Medicine | `medicine-pm` |
+| Shower | `shower` |
+| Exercise | `exercise` |
+
+Nothing else changes — not even the notification, because the server names the
+activity itself. That also means the wording can be reworded later from the
+script, without collecting four phones.
 
 **Tapping twice is safe and always has been.** The second tap does not record a
-second event — it answers with the *first* time. That is on purpose: checking
-"did I already do that?" by pressing the button again is exactly what she will
-do, and it has to give the right answer.
+second event; it answers with the *first* time, and says "already". That is on
+purpose: pressing the button again to check "did I already do that?" is exactly
+what she will do, and it has to give the right answer.
 
-#### Optional: say "already" explicitly
+---
 
-If you would rather the repeat press be spelled out, add two actions between 2
-and 3: a second **Get Dictionary Value** for key `already`, and a nested **If**
-on it inside the success branch, with `Already recorded at [time]` in one arm
-and `Recorded — Morning medicine, [time]` in the other. Test the condition on
-the real phone before trusting it — how Shortcuts compares a JSON `true` has
-varied between iOS versions, which is the reason the version above avoids
-booleans entirely.
+#### If you would rather parse the JSON
+
+Dropping `&fmt=text` makes the same URL return
+`{"ok":true,"kind":"medicine-am","already":false,"at":"8:20 AM"}` instead, which
+is the machine-readable shape and is what to use when diagnosing — it carries
+the real error (`unauthorized`, `no log tab`) where the text version shows her
+wording. Building the notification from it on the phone takes five actions
+(**Get Dictionary Value** for key `at`, an **If** on *has any value*, and a
+**Show Notification** in each branch) and is not recommended: it is four times
+the work, on a phone keyboard, for the same result.
 
 #### Putting them on her phone
 
