@@ -414,25 +414,46 @@
               white-space:nowrap; }
   .chips-row{ display:grid; grid-template-columns:repeat(4,1fr);
               gap:calc(9px*var(--vs)); }
+  /* Label left, status right, side by side (Greg, 2026-09-16) — not stacked.
+     The label takes the space it needs and wraps at its own spaces, so a
+     two-word name sets one word per line; the status is flex:0 0 auto on the
+     right so it is never the thing that gets squeezed. A chip is only ~160px
+     wide here, which is why the type sizes below are settled by measurement
+     (fitChips) rather than written down as a ceiling. */
   .chip{
     background:var(--card); border:1px solid var(--line); border-radius:12px;
     padding:calc(5px*var(--vs)) 10px calc(6px*var(--vs));
-    display:flex; flex-direction:column;
+    display:flex; flex-direction:row; align-items:center;
+    gap:calc(5px*var(--vs));
     min-width:0; overflow:hidden;
   }
   /* nowrap + overflow:hidden is what lets fitLine() measure this; the name is
      then shrunk until it fits rather than being ellipsised. Same contract as
      the header: the CSS size is a ceiling, nothing is ever cut off. */
-  .chip-name{ font-size:calc(20px*var(--vs)); font-weight:700; color:var(--soft);
-              line-height:1.2; white-space:nowrap; overflow:hidden; }
-  /* min-height, ALWAYS, pressed or not. Without it the strip would be shorter
-     in the morning than in the evening, so .grid would change height as the
-     day went on and fitBlock() would resize all three cards underneath her.
-     A board that silently re-typesets itself when she checks in is a worse
-     failure than a little reserved whitespace. */
-  .chip-when{ font-size:calc(19px*var(--vs)); font-weight:800; line-height:1.2;
-              min-height:calc(23px*var(--vs)); color:var(--muted);
-              font-variant-numeric:tabular-nums; white-space:nowrap; }
+  /* Wraps, so no nowrap. min-width:0 is load-bearing on a flex child — without
+     it the label refuses to shrink below its longest word and pushes the
+     status out of the chip instead of wrapping. */
+  .chip-name{ flex:1 1 auto; min-width:0; font-weight:700; color:var(--soft);
+              line-height:1.15; overflow:hidden;
+              font-size:calc(20px*var(--vs)); }
+  /* flex:0 0 auto and nowrap: the time is the one thing that must never wrap
+     or shrink away, so the LABEL yields to it rather than the other way round.
+
+     min-width RESERVES the column even when there is no time in it, and that
+     is not cosmetic. Without it an unpressed chip handed its whole width to the
+     label, so "Evening medicine" sat on ONE line while the pressed "Morning
+     medicine" beside it wrapped onto two — four chips in a row disagreeing
+     about their own shape, and the strip changing height the moment she
+     checked something in. Reserving it means every chip wraps identically all
+     day and the row never moves.
+
+     5.8em holds the widest time this can ever render ("✓ 12:05 PM", tabular
+     digits) with a little slack; fitChips() measures and would shrink the type
+     if it ever did not. */
+  .chip-when{ flex:0 0 auto; min-width:5.8em; font-weight:800; line-height:1.15;
+              color:var(--muted); text-align:right;
+              font-variant-numeric:tabular-nums; white-space:nowrap;
+              font-size:calc(19px*var(--vs)); }
   .chip[data-on="1"]{ background:var(--ok-bg); border-color:var(--ok-edge); }
   .chip[data-on="1"] .chip-name{ color:var(--ok-ink); }
   .chip[data-on="1"] .chip-when{ color:var(--ok-ink); }
@@ -1265,30 +1286,48 @@ function renderChips(todayISO){
 
     chip.appendChild(name); chip.appendChild(when); row.appendChild(chip);
   });
-  /* Fitted as a GROUP, not one at a time, and that is the whole point of
-     doing it by hand here rather than calling fitLine() four times.
-     Independently fitted, "Shower" and "Exercise" sit at the ceiling while
-     "Morning medicine" shrinks to fit its chip — four different type sizes in
-     one row, which reads as broken rather than as fitted. So: walk them all,
-     let the size only ever ratchet DOWN, then put the surviving size on all
-     four. One size for the row, chosen by its longest label.
+  fitChips(row);
+}
 
-     Still the same contract as every other box on this board — the CSS size
-     is a ceiling and this only ever shrinks — and it still exists because
-     "nothing is ever clipped" is an invariant rather than a hope. It matters
-     more here than it did when the strip was full width: in the left column a
-     chip is ~160px, not ~240px, so the labels genuinely do not fit at the
-     ceiling and this is load-bearing rather than belt-and-braces. */
-  const max=Math.round(20*vScale), min=Math.round(11*vScale);
+/* Fit the whole strip as ONE group, not chip by chip.
+   Fitted independently, "Shower" sits at the ceiling while "Morning medicine"
+   shrinks — four different type sizes in one row, which reads as broken rather
+   than as fitted. So the size only ever ratchets DOWN across all four, and the
+   survivor is applied to every chip.
+
+   Two things are measured, because side by side there are two ways to fail:
+     - the LABEL's longest word must fit its column (scrollWidth), and the
+       wrapped label must fit the chip's height (scrollHeight);
+     - the TIME must fit without wrapping.
+   The time is checked first and shrinks with the label, because a chip only
+   ~160px wide cannot always hold both at the size either would like.
+
+   Same contract as every other box on this board: the CSS size is a ceiling
+   and this only ever shrinks. Load-bearing rather than belt-and-braces here —
+   the labels genuinely do not fit at the ceiling in a left-column chip. */
+function fitChips(row){
   const names=row.querySelectorAll('.chip-name');
-  let size=max;
-  Array.prototype.forEach.call(names,function(el){
-    el.style.fontSize=size+'px';
-    while(size>min && el.scrollWidth>el.clientWidth){
-      size-=1; el.style.fontSize=size+'px';
-    }
-  });
-  Array.prototype.forEach.call(names,function(el){ el.style.fontSize=size+'px'; });
+  const whens=row.querySelectorAll('.chip-when');
+  const max=Math.round(20*vScale), min=Math.round(10*vScale);
+  function apply(px){
+    Array.prototype.forEach.call(names,function(el){ el.style.fontSize=px+'px'; });
+    /* The time rides a touch smaller than the label: it is tabular digits,
+       which read cleanly a size down, and it is the half with no room to
+       wrap. Buying that back for the label is the better trade. */
+    Array.prototype.forEach.call(whens,function(el){
+      el.style.fontSize=Math.max(min,px-1)+'px'; });
+  }
+  function overflows(){
+    let bad=false;
+    Array.prototype.forEach.call(names,function(el){
+      if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1) bad=true; });
+    Array.prototype.forEach.call(whens,function(el){
+      if(el.scrollWidth>el.clientWidth+1) bad=true; });
+    return bad;
+  }
+  let size=max; apply(size);
+  while(size>min && overflows()){ size-=1; apply(size); }
+  return size;
 }
 
 function renderFull(data,todayISO){

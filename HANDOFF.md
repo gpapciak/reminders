@@ -765,6 +765,34 @@ Moving it into the left column changes the economics completely:
   costs ~23px of height and is the cheaper trade here — the opposite of the
   answer when the strip was full width.
 
+**Chip layout: label left, status right** (Greg, 2026-09-16), rather than
+stacked. The label wraps at its own spaces, so a two-word name sets one word
+per line; the status sits on the right and never wraps.
+
+`.chip-when` carries a `min-width` that reserves its column *even when empty*,
+and that is load-bearing rather than cosmetic. Without it an unpressed chip
+handed its whole width to the label, so "Evening medicine" sat on one line
+while the pressed "Morning medicine" beside it wrapped onto two — four chips
+disagreeing about their own shape, and the strip changing height the moment she
+checked something in. Reserved, every chip wraps identically all day.
+
+**THE COST IS TYPE SIZE, and it is the open question on this layout.** A chip is
+~160px wide; holding "medicine" and "✓ 10:05 AM" side by side fits at **14px
+label / 13px time**, measured, identical at all three viewports. The stacked
+version reached 20px because the label had the chip's full width. 14px is the
+smallest text on the board — the routine runs 17-25px and the calendar 22px.
+
+The arithmetic is unforgiving: at font size F the reserved status column is
+5.8F and the longest label word ("medicine") is ~4.6F, so 10.4F plus padding
+must fit 141px, which caps F at about 14. Side by side in a quarter-width chip
+cannot do better. The ways out, none taken yet:
+  - a 2x2 grid of chips (~330px wide, type back to ~19px) at roughly double the
+    strip height, which the sweep below says would drop on most days;
+  - shorter labels ("Morning meds"), worth only a point or two;
+  - going back to stacked, which trades the requested layout for the type size.
+Worth deciding in the room, on the panel — 14px may read perfectly well at 32
+inches, or not at all, and that is not a headless question.
+
 Resolved `--fs`, ten-item routine (`notes` stayed at its 40px ceiling):
 
 | viewport | card | strip off | strip on |
@@ -805,8 +833,12 @@ Swept against routine length at 1280×650 (today's `--fs`, off → on):
 
 | items | 6 | 8 | 10 | 12 | 15 |
 |---|---|---|---|---|---|
-| strip | 73px | 73px | 73px | **dropped** | **dropped** |
-| today | 25 → 25 | 25 → 21 | 23 → 17 | 19 → 19 | 15 → 15 |
+| strip | 65px | 65px | 65px | **dropped** | **dropped** |
+| today | 25 → 25 | 25 → 22 | 23 → 17 | 19 → 19 | 15 → 15 |
+
+(The side-by-side chip is 8px *shorter* than the stacked one it replaced, so the
+routine gained a point at eight items. The height came back from the label's
+second line no longer sitting above a reserved empty one.)
 
 So: **no cost at all up to six items**, a few px from seven to ten, and on a
 twelve-or-more-item day the strip stands down rather than squeezing the routine.
