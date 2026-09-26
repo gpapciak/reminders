@@ -926,7 +926,14 @@ asking.
    **Revisit the full card only if in-person support ends.**
 2. **No meals section, no IMPORTANT section.** Same reasoning: redundant with
    in-person support.
-3. **TODAY is a routine, not a task list.** It describes the shape of her day
+3. **TODAY is a routine, not a task list.** *(And it is the LEAST-USED element
+   on the board — Greg, 2026-09-26. That matters for layout arithmetic: nearly
+   every trade-off recorded in this file was made protecting the routine card's
+   type size, and that protection was worth less than it looked. It will also
+   never carry twelve items, so the sweeps in "What the strip costs" that show
+   the check-in strip dropping at twelve are measuring a case that does not
+   occur. Re-read those tables with this in mind before assuming something
+   does not fit.)* It describes the shape of her day
    so she can see what tends to come next — steadying under delirium symptoms.
    Nothing on it is her responsibility and nothing is ever ticked off. The
    caption says "TODAY'S ROUTINE" precisely so it doesn't read as assigned work.
