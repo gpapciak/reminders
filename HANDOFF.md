@@ -900,6 +900,16 @@ the spoken name of each kind.
   defaulting to open.
 - **Fixed kind allowlist.** No dynamic kinds; a fifth kind would write rows the
   board never renders.
+- **Kind matching normalises BOTH sides** (`logKindOf`). `norm()` strips
+  punctuation, so a slug with a hyphen comes back from the sheet unrecognisable
+  — `drops-am` reads as `dropsam`. An earlier version un-mangled the one side
+  with a regex that restored exactly `medicine-am` and `medicine-pm`, which was
+  correct until `drops-am` and `drops-pm` were added and then silently wrong:
+  rows were written correctly and skipped on the way back, so those chips never
+  went green and nothing errored or warned. **`test-log-kinds.js` round-trips
+  every kind in `LOG_KINDS` and is the regression guard** — run it with
+  `node test-log-kinds.js` after touching the endpoint. It reads `LOG_KINDS`
+  itself, so a new kind is covered without editing the test.
 - **Tail read, never `getDataRange()`.** `Log` is the only tab that grows
   without bound (~4 rows/day forever). 80 rows is 20 days of normal use, and
   the cost of the read stays flat in year three.

@@ -548,6 +548,31 @@ function logRowDate(row, rows) {
 }
 
 /**
+ * A cell from the Kind column -> the canonical slug, or '' if it is not one.
+ *
+ * Compares NORMALISED forms on both sides, and that symmetry is the whole
+ * point. norm() strips punctuation, so 'drops-am' in the sheet comes back as
+ * 'dropsam' and no longer matches the slug it was written from. The previous
+ * version tried to un-mangle the one side with a regex that restored exactly
+ * 'medicine-am' and 'medicine-pm' — correct when those were the only hyphenated
+ * kinds, and silently wrong the moment 'drops-am' and 'drops-pm' were added:
+ * their rows were written correctly and then skipped on the way back, so the
+ * chips never went green and nothing anywhere reported a problem.
+ *
+ * Normalising both sides instead means any future slug is safe whatever
+ * punctuation it carries, and a hand-typed "Drops AM" or "drops am" in the
+ * cell still resolves to the right kind.
+ */
+function logKindOf(raw) {
+  var n = norm(raw);
+  if (!n) return '';
+  for (var i = 0; i < LOG_KINDS.length; i++) {
+    if (norm(LOG_KINDS[i]) === n) return LOG_KINDS[i];
+  }
+  return '';
+}
+
+/**
  * TODAY ONLY, keyed by kind, as epoch ms.
  *
  * Yesterday's rows are simply never returned, so a board that somehow ignored
@@ -572,8 +597,8 @@ function readLog(ss, out) {
     }
     for (var r = 0; r < rows.values.length; r++) {
       var row = rows.values[r];
-      var kind = norm(cell(row, rows.cKind)).replace(/^medicine(am|pm)$/, 'medicine-$1');
-      if (LOG_KINDS.indexOf(kind) < 0) continue;
+      var kind = logKindOf(cell(row, rows.cKind));
+      if (!kind) continue;
       if (logRowDate(row, rows) !== out.serverLaDate) continue;
       var ts = row[rows.cTime];
       if (!ts || typeof ts.getTime !== 'function' || isNaN(ts.getTime())) continue;
