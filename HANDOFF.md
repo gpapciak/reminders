@@ -832,6 +832,24 @@ dormant since the medication card was removed, so nothing rendered them. The
 first green chip after 8pm would have put `#e3f1e4` — a near-white panel — on
 the living room's dark board, appearing for the first time on an evening nobody
 was testing. Night values are now defined alongside the rest of the palette.
+
+**Filled, not tinted** (2026-09-26). A checked-in chip is a solid block of
+`--ok-fill` with `--ok-on-fill` text, so the achievement reads across the room
+instead of being a slightly different shade of paper. Measured:
+
+| | fill | text on fill | fill vs unchecked chip |
+|---|---|---|---|
+| day | `#2e7d4f` + white | 5.05:1 | 4.96:1 |
+| night | `#33512b` + `#9dbd68` | 4.21:1 | 2.20:1 |
+
+The day fill is picked for contrast against white, not for looking nice — a
+lighter, prettier green does not clear 4.5:1 at this text size. **Night is
+deliberately NOT white on bright green**: that would be the brightest thing on
+the living-room board after 9pm, arriving for the first time on an evening
+nobody was testing. A dark fill with the palette's own dim green still reads as
+filled against the chips beside it, which is the whole job. The first draft of
+the night fill measured 1.32:1 against an unchecked chip — invisible — and was
+lifted to 2.20:1.
 Green is kept rather than folded into the amber: the hue is the meaning, and
 the palette's stated rule bans white and blue, not colour. Luminance is matched
 to `--soft`. Provisional like every other number in that block.

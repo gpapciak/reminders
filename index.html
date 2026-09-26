@@ -33,9 +33,15 @@
     --mark:#c08a20;                          /* "today" divider       */
     --note-ink:#2b4a66;                      /* numbers / upcoming    */
 
-    /* The "recorded" green. Was kept dormant for the removed medication card;
-       now live, as the pressed state of a check-in chip. */
+    /* The "recorded" green. --ok-fill is the SOLID one a checked-in chip is
+       painted with, --ok-on-fill the text on top of it; the paler --ok-bg /
+       --ok-ink pair is what the fill replaced and is kept because the tint is
+       still the right weight anywhere a whole card might use it.
+       --ok-fill is chosen for contrast against white rather than for
+       prettiness: measured 5.1:1, which clears 4.5 for text this size. A
+       lighter, nicer green does not. */
     --ok-bg:#e3f1e4; --ok-ink:#245c33; --ok-edge:#4f9c63;
+    --ok-fill:#2e7d4f; --ok-on-fill:#ffffff;
     --soon-bg:#fbeecf; --soon-ink:#6b4a12; --soon-edge:#d69a2c;
   }
 
@@ -92,6 +98,15 @@
        part of this board". PROVISIONAL, like every other number in this block:
        it has never been seen on a television in a dark room. */
     --ok-bg:#0f1509; --ok-ink:#7f9c50; --ok-edge:#3f5226;
+    /* The filled chip at NIGHT, and note what it is not: white on a bright
+       green. This palette bans white outright — a solid #2e7d4f block with
+       white text is roughly the brightest thing that could appear on the
+       living-room board after 9pm, and it would arrive for the first time on
+       an evening nobody was testing. So the fill is dark and the text is the
+       same dim green the rest of the night palette uses. It still reads as
+       FILLED against the unfilled chips beside it, which is the whole job;
+       it just does it without lighting up the room. */
+    --ok-fill:#33512b; --ok-on-fill:#9dbd68;
   }
 
   /* ---- BEDROOM NIGHT: deeper still ----------------------------------
@@ -460,9 +475,13 @@
               color:var(--muted); text-align:right;
               font-variant-numeric:tabular-nums; white-space:nowrap;
               font-size:calc(19px*var(--vs)); }
-  .chip[data-on="1"]{ background:var(--ok-bg); border-color:var(--ok-edge); }
-  .chip[data-on="1"] .chip-name{ color:var(--ok-ink); }
-  .chip[data-on="1"] .chip-when{ color:var(--ok-ink); }
+  /* Filled, not tinted (Greg, 2026-09-26): a checked-in chip is a solid block
+     of green with white text on it, so the achievement reads across the room
+     rather than being a slightly different shade of paper. The border matches
+     the fill so the chip is one shape instead of an outline around a colour. */
+  .chip[data-on="1"]{ background:var(--ok-fill); border-color:var(--ok-fill); }
+  .chip[data-on="1"] .chip-name,
+  .chip[data-on="1"] .chip-when{ color:var(--ok-on-fill); }
 
   /* ---- Footer: the reassurance line ---- */
   .reassure{ flex:0 0 auto; text-align:center; font-size:calc(46px*var(--vs)); font-weight:700;
