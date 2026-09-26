@@ -439,8 +439,11 @@
   /* Wraps, so no nowrap. min-width:0 is load-bearing on a flex child — without
      it the label refuses to shrink below its longest word and pushes the
      status out of the chip instead of wrapping. */
+  /* Centred in its own column, not across the whole chip — the time occupies
+     the right-hand column, so centring over the full width would sit the label
+     off to one side of the space it actually has. */
   .chip-name{ flex:1 1 auto; min-width:0; font-weight:700; color:var(--soft);
-              line-height:1.1; overflow:hidden;
+              line-height:1.1; overflow:hidden; text-align:center;
               font-size:calc(20px*var(--vs)); }
   .chip-line{ white-space:nowrap; overflow:hidden; }
   /* flex:0 0 auto and nowrap: the time must never wrap or shrink away, so the
@@ -898,7 +901,12 @@ const CHIP_MAX = 16;
 const CHECKINS = [
   { kind:'medicine-am', lines:['Meds','AM'] },
   { kind:'medicine-pm', lines:['Meds','PM'] },
-  { kind:'shower',      lines:['Shower',''] },
+  /* One line, not two-with-a-blank. The chip is a row-flex with
+     align-items:center and the grid stretches every chip to its row's height,
+     so a single-line label lands vertically centred while the chip stays
+     exactly as tall as its two-line neighbours. A padding line would push it
+     to the top instead. */
+  { kind:'shower',      lines:['Shower'] },
   { kind:'exercise',    lines:['Biking/','Walking'] },
   { kind:'drops-am',    lines:['Drops','AM'] },
   { kind:'drops-pm',    lines:['Drops','PM'] },
