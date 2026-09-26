@@ -776,38 +776,25 @@ and `medicine-am` reads "Meds AM", but the slugs are unchanged: a slug is the
 stored identity, and renaming one would orphan every row already in the Log tab
 and silently break the Shortcuts already on her phone.
 
-**Stacked, not side by side, and that is a measured reversal.** Side by side the
-label and the time competed for the same ~140px of chip width: the time reserved
-~5.8em and the longest label word ("Practice") needed ~4.6em, so the label could
-never exceed 14px however much vertical room the column had. That is why
-shrinking the notes box bought nothing at first — the binding constraint was
-width and the freed space was height. Stacked, each gets the full width and the
-label is capped by height instead, which is the thing that was freed.
-
-**`CHIP_MAX` is the knob**, and the trade is steep. At 1280×650, six-item routine:
-
-| CHIP_MAX | label | chip | strip | routine | notes |
-|---|---|---|---|---|---|
-| 26 | 23px | 81px | 188px | 17px | 26px |
-| 23 | 21px | 75px | 177px | 19px | 27px |
-| 20 | 18px | 66px | 159px | 21px | 30px |
-| 18 | 16px | 60px | 146px | 23px | 32px |
-| **16** | **14px** | **54px** | **135px** | **25px** | **33px** |
-
-**Doubling the button size was asked for and is NOT shipped, because it makes
-the strip disappear.** Swept against routine length, the strip either drops or
-guts the routine well before it doubles:
+**Side by side (label left, time right), and stacking was tried and reverted.**
+Stacked, each gets the full chip width and the label reaches ~23px instead of
+14px — genuinely tempting. But it costs ~23px of strip height per row, and at
+that height the strip stops fitting on most routine lengths and simply drops.
+Measured at 1280x650, eight chips, by routine length:
 
 | routine items | 4 | 6 | 8 | 10 | 12 |
 |---|---|---|---|---|---|
-| CHIP_MAX 26 | dropped | 188px | dropped | dropped | dropped |
-| CHIP_MAX 20 | 159px, routine 33→15 | 159px | 159px, routine 25→16 | dropped | dropped |
-| **CHIP_MAX 16** | **135px** | **135px** | **135px** | **135px** | dropped |
+| side by side (shipped) | 112px, routine 20px | 112px, 25px | 112px, 21px | 112px, 17px | dropped |
+| stacked | 135px, routine 18px | 135px, 25px | 135px, 18px | 135px, 15px | dropped |
 
-At 26 the strip survives exactly one routine length. 16 is the largest setting
-that is actually *stable*, and it happens to hold the old button size while
-doubling the button count — the second row is paid for by the notes card, which
-moved from 46/50 of the column to 38/42 (`ROUTINE_SPLIT`).
+Side by side is better on every axis measured: shorter strip, more routine type
+at every length, same 14px label. **14px that is actually on screen beats 23px
+that usually is not.**
+
+ therefore does nothing at the current width — the chip's WIDTH binds
+at 14px whatever it says. It is kept as a named constant because it stops being
+inert the moment anything widens the chips (a full-width strip, fewer per row),
+and because raising it is the first thing anyone will try.
 
 Bigger buttons need a wider chip, which means leaving this column. The untried
 option is full width under the grid: ~290px chips would allow ~25px labels, but

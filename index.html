@@ -417,24 +417,20 @@
      between rows still reads as two rows rather than a block. */
   .chips-row{ display:grid; grid-template-columns:repeat(4,1fr);
               gap:calc(6px*var(--vs)) calc(9px*var(--vs)); }
-  /* Label above, time below (2026-09-26) — back to stacked, and this time the
-     reason is measured rather than aesthetic.
+  /* Label left, status right. The label sets one word per line (the break is
+     explicit in CHECKINS), the status sits beside it and never wraps.
 
-     Side by side, the label and the time compete for the SAME 140px of chip
-     width: the time reserves ~5.8em and the longest label word ("Practice")
-     needs ~4.6em, so the type could never exceed 14px however much vertical
-     room the column had. That is why shrinking the notes box bought nothing
-     while they sat on one line — the binding constraint was width, and the
-     freed space was height.
-
-     Stacked, each gets the full width, so the label is capped by HEIGHT
-     instead — which is exactly the thing that was just freed up. Same eight
-     chips, same two rows, noticeably larger type. */
+     A note for anyone tempted to stack these to win type size: it does work —
+     side by side the two compete for the same ~140px, so the label caps at
+     14px, while stacked it can reach ~23px. It was tried and reverted. Stacked
+     costs ~50px more strip height, and at that height the strip stops fitting
+     on most routine lengths and simply drops. Side by side at 14px that
+     actually survives beats 23px that is usually not on screen. */
   .chip{
     background:var(--card); border:1px solid var(--line); border-radius:12px;
     padding:calc(5px*var(--vs)) 10px calc(6px*var(--vs));
-    display:flex; flex-direction:column; align-items:stretch;
-    justify-content:center;
+    display:flex; flex-direction:row; align-items:center;
+    gap:calc(5px*var(--vs));
     min-width:0; overflow:hidden;
   }
   /* nowrap + overflow:hidden is what lets fitLine() measure this; the name is
@@ -447,16 +443,20 @@
               line-height:1.1; overflow:hidden;
               font-size:calc(20px*var(--vs)); }
   .chip-line{ white-space:nowrap; overflow:hidden; }
-  /* Its own line under the label, and ALWAYS present — the nbsp placeholder in
-     renderChips() keeps an unpressed chip exactly as tall as a pressed one, so
-     the strip does not change height the moment she checks something in and
-     re-typeset the three cards underneath her.
+  /* flex:0 0 auto and nowrap: the time must never wrap or shrink away, so the
+     LABEL yields to it rather than the other way round.
 
-     No min-width needed now that it is not sharing a line with anything. */
-  .chip-when{ flex:0 0 auto; font-weight:800; line-height:1.15;
-              color:var(--muted); text-align:left;
+     min-width RESERVES the column even when empty, which is not cosmetic:
+     without it an unpressed chip hands its whole width to the label, so its
+     two lines re-flow to one and the chip — and with it the whole strip —
+     changes height the moment she checks something in, re-typesetting the
+     three cards underneath her. Reserved, all eight stay the same shape all
+     day. 5.8em holds the widest time this can render ("✓ 12:05 PM", tabular
+     digits) with slack; fitChips() measures and shrinks if it ever does not. */
+  .chip-when{ flex:0 0 auto; min-width:5.8em; font-weight:800; line-height:1.15;
+              color:var(--muted); text-align:right;
               font-variant-numeric:tabular-nums; white-space:nowrap;
-              overflow:hidden; font-size:calc(15px*var(--vs)); }
+              font-size:calc(19px*var(--vs)); }
   .chip[data-on="1"]{ background:var(--ok-bg); border-color:var(--ok-edge); }
   .chip[data-on="1"] .chip-name{ color:var(--ok-ink); }
   .chip[data-on="1"] .chip-when{ color:var(--ok-ink); }
@@ -887,12 +887,12 @@ function mediaUrlFor(file){
    the rows already in the Log tab and break the Shortcuts already on her
    phone. Only `lines` is free to change. Must stay in step with LOG_KINDS and
    LOG_LABELS in apps-script.gs. */
-/* The chip label CEILING, and the single knob that trades button size against
-   routine type. A ceiling, not a target — fitChips() walks it down until
-   everything fits — but the chips are flex:0 0 auto, so they take their height
-   before the cards do and raising this really does come out of the cards.
-   See the measured table in HANDOFF.md, "What the strip costs", before moving
-   it, and look at the result on the actual panel. */
+/* The chip label CEILING. A ceiling, not a target: fitChips() walks it down
+   until everything fits, and side by side in a ~160px chip it lands on 14px
+   whatever this says — the chip's WIDTH is what binds, not this number. It is
+   kept as a named constant because it stops being inert the moment anything
+   widens the chips (a full-width strip, fewer per row), and because raising it
+   is the first thing anyone will try. See HANDOFF.md before doing so. */
 const CHIP_MAX = 16;
 
 const CHECKINS = [
@@ -1362,11 +1362,10 @@ function fitChips(row){
   function apply(px){
     Array.prototype.forEach.call(names,function(el){ el.style.fontSize=px+'px'; });
 
-    /* The time rides well below the label: it is tabular digits, which read
-       cleanly small, and the label is the part she is scanning for. ~0.7
-       keeps them visibly different sizes rather than looking like a mistake. */
+    /* The time rides one point below the label: tabular digits read cleanly a
+       size down, and it is the half with no room to wrap. */
     Array.prototype.forEach.call(whens,function(el){
-      el.style.fontSize=Math.max(9,Math.round(px*0.7))+'px'; });
+      el.style.fontSize=Math.max(min,px-1)+'px'; });
   }
   function overflows(){
     let bad=false;
