@@ -765,63 +765,55 @@ Moving it into the left column changes the economics completely:
   costs ~23px of height and is the cheaper trade here — the opposite of the
   answer when the strip was full width.
 
-**Chip layout: label left, status right** (Greg, 2026-09-16), rather than
-stacked. The label wraps at its own spaces, so a two-word name sets one word
-per line; the status sits on the right and never wraps.
+**Eight chips, two rows of four** (2026-09-26, up from four in one row), with
+the label on two explicit lines above the time. `CHECKINS` holds the line break
+per chip rather than letting it wrap, so every two-word title sets one word per
+line and a one-word title still reserves the second — which is what keeps the
+two rows aligned.
 
-`.chip-when` carries a `min-width` that reserves its column *even when empty*,
-and that is load-bearing rather than cosmetic. Without it an unpressed chip
-handed its whole width to the label, so "Evening medicine" sat on one line
-while the pressed "Morning medicine" beside it wrapped onto two — four chips
-disagreeing about their own shape, and the strip changing height the moment she
-checked something in. Reserved, every chip wraps identically all day.
+**Slugs are frozen; only labels move.** `exercise` now reads "Biking/Walking"
+and `medicine-am` reads "Meds AM", but the slugs are unchanged: a slug is the
+stored identity, and renaming one would orphan every row already in the Log tab
+and silently break the Shortcuts already on her phone.
 
-**THE COST IS TYPE SIZE, and it is the open question on this layout.** A chip is
-~160px wide; holding "medicine" and "✓ 10:05 AM" side by side fits at **14px
-label / 13px time**, measured, identical at all three viewports. The stacked
-version reached 20px because the label had the chip's full width. 14px is the
-smallest text on the board — the routine runs 17-25px and the calendar 22px.
+**Stacked, not side by side, and that is a measured reversal.** Side by side the
+label and the time competed for the same ~140px of chip width: the time reserved
+~5.8em and the longest label word ("Practice") needed ~4.6em, so the label could
+never exceed 14px however much vertical room the column had. That is why
+shrinking the notes box bought nothing at first — the binding constraint was
+width and the freed space was height. Stacked, each gets the full width and the
+label is capped by height instead, which is the thing that was freed.
 
-The arithmetic is unforgiving: at font size F the reserved status column is
-5.8F and the longest label word ("medicine") is ~4.6F, so 10.4F plus padding
-must fit 141px, which caps F at about 14. Side by side in a quarter-width chip
-cannot do better. The ways out, none taken yet:
-  - a 2x2 grid of chips (~330px wide, type back to ~19px) at roughly double the
-    strip height, which the sweep below says would drop on most days;
-  - shorter labels ("Morning meds"), worth only a point or two;
-  - going back to stacked, which trades the requested layout for the type size.
-Worth deciding in the room, on the panel — 14px may read perfectly well at 32
-inches, or not at all, and that is not a headless question.
+**`CHIP_MAX` is the knob**, and the trade is steep. At 1280×650, six-item routine:
 
-Resolved `--fs`, ten-item routine (`notes` stayed at its 40px ceiling):
+| CHIP_MAX | label | chip | strip | routine | notes |
+|---|---|---|---|---|---|
+| 26 | 23px | 81px | 188px | 17px | 26px |
+| 23 | 21px | 75px | 177px | 19px | 27px |
+| 20 | 18px | 66px | 159px | 21px | 30px |
+| 18 | 16px | 60px | 146px | 23px | 32px |
+| **16** | **14px** | **54px** | **135px** | **25px** | **33px** |
 
-| viewport | card | strip off | strip on |
-|---|---|---|---|
-| 1280×720 | today | 25px | 19px |
-| | cal | 24px | **24px** |
-| **1280×650** (real Silk) | today | 23px | 17px |
-| | cal | 22px | **22px** |
-| 1280×510 | today | 18px | *dropped* |
-| | cal | 18px | **18px** |
+**Doubling the button size was asked for and is NOT shipped, because it makes
+the strip disappear.** Swept against routine length, the strip either drops or
+guts the routine well before it doubles:
 
-**The two-column threshold moved 6 → 4, and it is not a concession.** Found while
-fitting the strip: at five and six items the left column was so saturated that
-the strip could not fit at *any* height, not even 30px. The cause was that the
-single-column path was rendering a five-item routine at 22px and a six-item one
-at 18px — both *below* the 25px ceiling two columns can hold, because one tall
-column must shrink to fit the card while two short ones need not. "Stays one
-column and stays large" had quietly stopped being true somewhere around five
-items, and nobody had re-measured it since the card's height last changed.
+| routine items | 4 | 6 | 8 | 10 | 12 |
+|---|---|---|---|---|---|
+| CHIP_MAX 26 | dropped | 188px | dropped | dropped | dropped |
+| CHIP_MAX 20 | 159px, routine 33→15 | 159px | 159px, routine 25→16 | dropped | dropped |
+| **CHIP_MAX 16** | **135px** | **135px** | **135px** | **135px** | dropped |
 
-Splitting earlier fixes three things at once, at 1280×650:
+At 26 the strip survives exactly one routine length. 16 is the largest setting
+that is actually *stable*, and it happens to hold the old button size while
+doubling the button count — the second row is paid for by the notes card, which
+moved from 46/50 of the column to 38/42 (`ROUTINE_SPLIT`).
 
-| | before | after |
-|---|---|---|
-| 6-item routine, check-ins **off** | 18px | **25px** |
-| 6-item routine, check-ins **on** | strip could not fit at any height | strip fits, routine **still 25px** |
-| 6-item routine at 1280×510 | **clipped** (pre-existing) | no clip |
-
-That last row is a bug fix that predates this feature.
+Bigger buttons need a wider chip, which means leaving this column. The untried
+option is full width under the grid: ~290px chips would allow ~25px labels, but
+a ~164px full-width strip takes that height from BOTH columns, and the calendar
+has been paying nothing so far. Worth measuring only if 14px turns out to be
+unreadable in the room.
 
 **The strip still yields when there is no room.** `renderFull()` fits the cards,
 and if any of them still clips it hides the strip and re-fits. Deliberately a

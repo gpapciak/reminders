@@ -412,19 +412,29 @@
   .chips-cap{ flex:0 0 auto; font-size:calc(14px*var(--vs)); font-weight:800;
               letter-spacing:1.6px; color:var(--muted); line-height:1.3;
               white-space:nowrap; }
+  /* Two rows of four (2026-09-26). The row gap is tighter than the column gap
+     on purpose: vertical space is the scarce one in this column, and 6px
+     between rows still reads as two rows rather than a block. */
   .chips-row{ display:grid; grid-template-columns:repeat(4,1fr);
-              gap:calc(9px*var(--vs)); }
-  /* Label left, status right, side by side (Greg, 2026-09-16) — not stacked.
-     The label takes the space it needs and wraps at its own spaces, so a
-     two-word name sets one word per line; the status is flex:0 0 auto on the
-     right so it is never the thing that gets squeezed. A chip is only ~160px
-     wide here, which is why the type sizes below are settled by measurement
-     (fitChips) rather than written down as a ceiling. */
+              gap:calc(6px*var(--vs)) calc(9px*var(--vs)); }
+  /* Label above, time below (2026-09-26) — back to stacked, and this time the
+     reason is measured rather than aesthetic.
+
+     Side by side, the label and the time compete for the SAME 140px of chip
+     width: the time reserves ~5.8em and the longest label word ("Practice")
+     needs ~4.6em, so the type could never exceed 14px however much vertical
+     room the column had. That is why shrinking the notes box bought nothing
+     while they sat on one line — the binding constraint was width, and the
+     freed space was height.
+
+     Stacked, each gets the full width, so the label is capped by HEIGHT
+     instead — which is exactly the thing that was just freed up. Same eight
+     chips, same two rows, noticeably larger type. */
   .chip{
     background:var(--card); border:1px solid var(--line); border-radius:12px;
     padding:calc(5px*var(--vs)) 10px calc(6px*var(--vs));
-    display:flex; flex-direction:row; align-items:center;
-    gap:calc(5px*var(--vs));
+    display:flex; flex-direction:column; align-items:stretch;
+    justify-content:center;
     min-width:0; overflow:hidden;
   }
   /* nowrap + overflow:hidden is what lets fitLine() measure this; the name is
@@ -434,26 +444,19 @@
      it the label refuses to shrink below its longest word and pushes the
      status out of the chip instead of wrapping. */
   .chip-name{ flex:1 1 auto; min-width:0; font-weight:700; color:var(--soft);
-              line-height:1.15; overflow:hidden;
+              line-height:1.1; overflow:hidden;
               font-size:calc(20px*var(--vs)); }
-  /* flex:0 0 auto and nowrap: the time is the one thing that must never wrap
-     or shrink away, so the LABEL yields to it rather than the other way round.
+  .chip-line{ white-space:nowrap; overflow:hidden; }
+  /* Its own line under the label, and ALWAYS present — the nbsp placeholder in
+     renderChips() keeps an unpressed chip exactly as tall as a pressed one, so
+     the strip does not change height the moment she checks something in and
+     re-typeset the three cards underneath her.
 
-     min-width RESERVES the column even when there is no time in it, and that
-     is not cosmetic. Without it an unpressed chip handed its whole width to the
-     label, so "Evening medicine" sat on ONE line while the pressed "Morning
-     medicine" beside it wrapped onto two — four chips in a row disagreeing
-     about their own shape, and the strip changing height the moment she
-     checked something in. Reserving it means every chip wraps identically all
-     day and the row never moves.
-
-     5.8em holds the widest time this can ever render ("✓ 12:05 PM", tabular
-     digits) with a little slack; fitChips() measures and would shrink the type
-     if it ever did not. */
-  .chip-when{ flex:0 0 auto; min-width:5.8em; font-weight:800; line-height:1.15;
-              color:var(--muted); text-align:right;
+     No min-width needed now that it is not sharing a line with anything. */
+  .chip-when{ flex:0 0 auto; font-weight:800; line-height:1.15;
+              color:var(--muted); text-align:left;
               font-variant-numeric:tabular-nums; white-space:nowrap;
-              font-size:calc(19px*var(--vs)); }
+              overflow:hidden; font-size:calc(15px*var(--vs)); }
   .chip[data-on="1"]{ background:var(--ok-bg); border-color:var(--ok-edge); }
   .chip[data-on="1"] .chip-name{ color:var(--ok-ink); }
   .chip[data-on="1"] .chip-when{ color:var(--ok-ink); }
@@ -872,11 +875,35 @@ function mediaUrlFor(file){
        nothing about it may look like a problem.
    The unpressed state is therefore just the name, in the same muted ink the
    board uses everywhere else, and it asserts nothing at all. */
+/* Eight, in two rows of four (2026-09-26). `lines` is the label broken
+   EXPLICITLY rather than left to wrap: every two-word title sets one word per
+   line, so all eight chips are the same shape whatever the column width does,
+   and "Biking/" breaks where it is meant to rather than wherever the box
+   happens to run out. A one-word title still reserves the second line, which
+   is what keeps the two rows aligned.
+
+   The `kind` slugs of the first four are UNCHANGED even though two now read
+   differently — the slug is the stored identity, and renaming one would orphan
+   the rows already in the Log tab and break the Shortcuts already on her
+   phone. Only `lines` is free to change. Must stay in step with LOG_KINDS and
+   LOG_LABELS in apps-script.gs. */
+/* The chip label CEILING, and the single knob that trades button size against
+   routine type. A ceiling, not a target — fitChips() walks it down until
+   everything fits — but the chips are flex:0 0 auto, so they take their height
+   before the cards do and raising this really does come out of the cards.
+   See the measured table in HANDOFF.md, "What the strip costs", before moving
+   it, and look at the result on the actual panel. */
+const CHIP_MAX = 16;
+
 const CHECKINS = [
-  { kind:'medicine-am', name:'Morning medicine' },
-  { kind:'medicine-pm', name:'Evening medicine' },
-  { kind:'shower',      name:'Shower' },
-  { kind:'exercise',    name:'Exercise' }
+  { kind:'medicine-am', lines:['Meds','AM'] },
+  { kind:'medicine-pm', lines:['Meds','PM'] },
+  { kind:'shower',      lines:['Shower',''] },
+  { kind:'exercise',    lines:['Biking/','Walking'] },
+  { kind:'drops-am',    lines:['Drops','AM'] },
+  { kind:'drops-pm',    lines:['Drops','PM'] },
+  { kind:'outside',     lines:['Outside','Time'] },
+  { kind:'memory',      lines:['Memory','Practice'] }
 ];
 
 /* ---- URL flags and device identity ---------------------------------
@@ -976,7 +1003,7 @@ const DEMO_DATA = {
      that has to be looked at (all-green and all-grey both hide the contrast
      the strip depends on), and evening medicine left grey because "grey all
      morning and that is normal" is the case the copy has to survive. */
-  checkins:{ 'medicine-am':8*60+20, 'shower':10*60+5 },
+  checkins:{ 'medicine-am':8*60+20, 'shower':10*60+5, 'drops-am':8*60+25, 'outside':11*60+40 },
 };
 
 /* What the board shows when it has nothing trustworthy for today.
@@ -1157,7 +1184,12 @@ const PAST_MAX=4, PAST_MAX_BUSY=2, BUSY_AHEAD=8, TOTAL_MAX=13;
    nothing; what it buys is the short-routine case, where the card used to
    inflate to fill its share and left the strip nothing. */
 const ROUTINE_MAX={ many:25, few:36 }, NOTES_MAX=40;
-const ROUTINE_SPLIT={ many:54, few:50 };
+/* Share of the left column going to the ROUTINE; the notes card gets the rest,
+   minus whatever the check-in strip takes first (it is flex:0 0 auto). Notes
+   moved 46/50 -> 38/42 on request (2026-09-26): the notes box was standing
+   taller than its content needed, and that height is the only slack in this
+   column now that the strip is eight buttons in two rows. */
+const ROUTINE_SPLIT={ many:62, few:58 };
 function calendarWindow(items, todayISO){
   const clean=(items||[])
     .filter(e=>e&&isoToUTCDate(e.date)&&String(e.what||'').trim())
@@ -1274,7 +1306,17 @@ function renderChips(todayISO){
     if(on) chip.setAttribute('data-on','1');
 
     const name=document.createElement('div');
-    name.className='chip-name'; name.textContent=c.name;
+    name.className='chip-name';
+    /* Two explicit lines, always — including the empty second one for a
+       one-word title, so every chip is the same height and the two rows line
+       up. Separate elements rather than a <br> so each line can be measured
+       on its own by fitChips(). */
+    c.lines.forEach(function(t){
+      const ln=document.createElement('div');
+      ln.className='chip-line';
+      ln.textContent=t||'\u00a0';      /* nbsp: an empty div has no height */
+      name.appendChild(ln);
+    });
 
     const when=document.createElement('div');
     when.className='chip-when';
@@ -1282,7 +1324,9 @@ function renderChips(todayISO){
        focusUntilMs and unlike the local Date.now() stamps. The board formats
        it with the same fmtTime as the clock in the header, so the time on the
        chip and the time she is looking at are in the same voice. */
-    when.textContent=on?('\u2713 '+fmtTime.format(new Date(at))):'';
+    /* nbsp rather than empty when unpressed: an empty line collapses, and the
+       chip would then be shorter than its pressed neighbours. */
+    when.textContent=on?('\u2713 '+fmtTime.format(new Date(at))):'\u00a0';
 
     chip.appendChild(name); chip.appendChild(when); row.appendChild(chip);
   });
@@ -1307,20 +1351,31 @@ function renderChips(todayISO){
    the labels genuinely do not fit at the ceiling in a left-column chip. */
 function fitChips(row){
   const names=row.querySelectorAll('.chip-name');
+  /* The individual LINES, not their container. Each line is its own nowrap
+     box, so when a word is too wide it overflows THAT box — and .chip-name,
+     which has overflow:hidden of its own, reports a scrollWidth that has
+     already been clipped to its content box and looks like a fit. Measuring
+     the container here silently let labels be cut off; measure the lines. */
+  const lines=row.querySelectorAll('.chip-line');
   const whens=row.querySelectorAll('.chip-when');
-  const max=Math.round(20*vScale), min=Math.round(10*vScale);
+  const max=Math.round(CHIP_MAX*vScale), min=Math.round(10*vScale);
   function apply(px){
     Array.prototype.forEach.call(names,function(el){ el.style.fontSize=px+'px'; });
-    /* The time rides a touch smaller than the label: it is tabular digits,
-       which read cleanly a size down, and it is the half with no room to
-       wrap. Buying that back for the label is the better trade. */
+
+    /* The time rides well below the label: it is tabular digits, which read
+       cleanly small, and the label is the part she is scanning for. ~0.7
+       keeps them visibly different sizes rather than looking like a mistake. */
     Array.prototype.forEach.call(whens,function(el){
-      el.style.fontSize=Math.max(min,px-1)+'px'; });
+      el.style.fontSize=Math.max(9,Math.round(px*0.7))+'px'; });
   }
   function overflows(){
     let bad=false;
+    /* Width is asked of each LINE (see above); height is asked of the
+       container, because that is what holds both lines. */
+    Array.prototype.forEach.call(lines,function(el){
+      if(el.scrollWidth>el.clientWidth+1) bad=true; });
     Array.prototype.forEach.call(names,function(el){
-      if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1) bad=true; });
+      if(el.scrollHeight>el.clientHeight+1) bad=true; });
     Array.prototype.forEach.call(whens,function(el){
       if(el.scrollWidth>el.clientWidth+1) bad=true; });
     return bad;

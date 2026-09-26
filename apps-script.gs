@@ -35,7 +35,15 @@ var BEAT_MIN_GAP_MS = 150000;
 /* ---------- check-ins ----------
    She taps a button on her phone; that tap appends one row here. The board
    reads them back and shows four chips. See the Log section further down. */
-var LOG_KINDS = ['medicine-am', 'medicine-pm', 'shower', 'exercise'];
+/* Eight kinds (2026-09-26, up from four). The SLUGS of the original four are
+   deliberately unchanged even though two of them are now shown under different
+   names — 'exercise' reads as "Biking/Walking" on the board. A slug is the
+   stored identity: renaming it would orphan every row already in the Log tab
+   and silently break the four Shortcuts already on her phone. Display names
+   live in LOG_LABELS and in CHECKINS in index.html; those are free to change,
+   slugs are not. */
+var LOG_KINDS = ['medicine-am', 'medicine-pm', 'shower', 'exercise',
+                 'drops-am', 'drops-pm', 'outside', 'memory'];
 /* How each kind is SPOKEN, for the notification on her phone. Lives here and
    not in the Shortcut because a Shortcut cannot be redeployed remotely: if this
    wording ever needs to change, changing it here changes all four phones'
@@ -44,7 +52,11 @@ var LOG_LABELS = {
   'medicine-am': 'Morning medicine',
   'medicine-pm': 'Evening medicine',
   'shower':      'Shower',
-  'exercise':    'Exercise'
+  'exercise':    'Biking or walking',
+  'drops-am':    'Morning drops',
+  'drops-pm':    'Evening drops',
+  'outside':     'Outside time',
+  'memory':      'Memory practice'
 };
 /* Read only the TAIL of the Log tab, never getDataRange(). doGet is polled by
    every display all day and this tab is the only one that grows without bound

@@ -576,12 +576,20 @@ From the Shortcuts list, long-press **Morning Medicine** → **Duplicate** →
 long-press the copy → **Rename**. Open it and change **one thing**: the word
 after `log=` in the URL.
 
-| Shortcut name | change `log=` to |
-|---|---|
-| Morning Medicine | `medicine-am` |
-| Evening Medicine | `medicine-pm` |
-| Shower | `shower` |
-| Exercise | `exercise` |
+| Shortcut name | change `log=` to | shows on the board as |
+|---|---|---|
+| Morning Medicine | `medicine-am` | Meds / AM |
+| Evening Medicine | `medicine-pm` | Meds / PM |
+| Shower | `shower` | Shower |
+| Biking or Walking | `exercise` | Biking/ / Walking |
+| Morning Drops | `drops-am` | Drops / AM |
+| Evening Drops | `drops-pm` | Drops / PM |
+| Outside Time | `outside` | Outside / Time |
+| Memory Practice | `memory` | Memory / Practice |
+
+**The four original `log=` words did not change**, even though two of them are
+now shown under different names on the board. Those four Shortcuts keep working
+untouched; only the four new ones need building.
 
 Nothing else changes — not even the notification, because the server names the
 activity itself. That also means the wording can be reworded later from the
