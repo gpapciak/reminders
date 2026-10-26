@@ -157,8 +157,15 @@ the deliberate default.
   keep their usual board, so this does not affect them.
 - All three are optional; leaving them out gives the defaults above.
   **See §4, "The evening and the bedroom at night".**
-- **checkins** — `on` shows the row of four check-in chips. Anything else, or
-  blank, hides it completely. **See §5a, "Check-ins".**
+- **checkins** — `on` shows the strip of eight check-in chips. Anything else,
+  or blank, hides it completely. Her taps are still recorded in the `Log` tab
+  either way. A screen showing the calendar `takeover` (§3b) does not show the
+  strip. **See §5a, "Check-ins".**
+- **Column A is the only thing the board matches on.** Capitals, spaces and
+  dashes there don't matter (`Media Every Min` works). A row with column A
+  empty is ignored, so a heading or a reminder can sit in its own row with
+  column A left blank. Don't put a heading in column A: one called
+  "CHECK-INS" would be read as the `checkins` setting.
 - **media**, **mediaEveryMin**, **mediaHoldSec** — the photo moments master
   switch and its timing. All optional; leaving them out means no photo moments
   at all, which is the default. **See §5, "Photo moments".**
@@ -186,6 +193,13 @@ today and "for 1 more day." on the 19th, with nobody editing anything.
 Write the **date**, never the number. A hand-typed "13 more days" is wrong
 tomorrow and nobody notices — which is exactly the kind of quietly-wrong
 information this board exists to prevent.
+
+**Once the date has passed, the whole item disappears, not just the
+countdown.** In a `Days` row that is one note. In the `notes` setting it is
+the *entire* cell, everything else in it included. So a countdown in `notes`
+takes the standing notes down with it the day after the visit ends. Either
+keep the countdown out of `notes`, or remember to edit the cell when the date
+passes.
 
 ---
 
@@ -479,11 +493,20 @@ went wrong the ordinary board is always what comes back.
 
 ---
 
-## 5a. Check-ins — four buttons on her phone
+## 5a. Check-ins — eight buttons on her phone
 
-She taps a button on her phone when she takes her morning medicine, her evening
-medicine, showers, or exercises. The board shows four chips: grey with no time,
-or green with a checkmark and the time it was recorded. They clear at midnight.
+She taps a button on her phone when she takes her morning or evening medicine,
+puts in her morning or evening drops, showers, bikes or walks, spends time
+outside, or does her memory practice. The board shows eight chips, in two rows
+of four:
+
+| | | | |
+|---|---|---|---|
+| Meds AM | Meds PM | Shower | Biking/Walking |
+| Drops AM | Drops PM | Outside Time | Memory Practice |
+
+Each chip is grey with no time until she taps, then solid green with a
+checkmark and the time it was recorded. They clear at midnight.
 
 **She never touches the television.** The board stays read-only; the buttons
 are on the phone.
@@ -562,7 +585,7 @@ Leave it off until you have seen the strip on the table display. You can preview
 it on one screen without touching the Sheet by opening that display's URL with
 `&checkins=1` on the end.
 
-### 4. Four Shortcuts on her phone
+### 4. Eight Shortcuts on her phone
 
 **There is no Google account on her phone, and there does not need to be.**
 Nothing Google-branded is installed or signed in — no Sheets app, no Drive, no
@@ -576,7 +599,7 @@ interpret months from now.
 
 **Build ONE of them completely, test it, then duplicate it three times.** Only
 the URL and one word of the notification change between them, and duplicating
-is far less error-prone than building the same six actions four times on a
+is far less error-prone than building the same six actions eight times on a
 phone keyboard.
 
 #### Building the first one
@@ -650,7 +673,7 @@ get a notification with a real time in it. Then **delete that row from the
 
 ---
 
-#### Then duplicate it three times
+#### Then duplicate it seven times
 
 From the Shortcuts list, long-press **Morning Medicine** → **Duplicate** →
 long-press the copy → **Rename**. Open it and change **one thing**: the word
@@ -673,7 +696,7 @@ untouched; only the four new ones need building.
 
 Nothing else changes — not even the notification, because the server names the
 activity itself. That also means the wording can be reworded later from the
-script, without collecting four phones.
+script, without collecting her phone.
 
 **Tapping twice is safe and always has been.** The second tap does not record a
 second event; it answers with the *first* time, and says "already". That is on
@@ -695,13 +718,14 @@ the work, on a phone keyboard, for the same result.
 
 #### Putting them on her phone
 
-**A widget is worth trying first** — it puts all four on the home screen with no
-folder to open. Put the four shortcuts in a folder first (Shortcuts → the
+**A widget is worth trying first** — it puts all eight on the home screen with
+no folder to open. Put the eight shortcuts in a folder first (Shortcuts → the
 sidebar → **New Folder** → `Check-ins`), then long-press the home screen → **+**
-→ **Shortcuts** → the **medium** (4-slot) widget → **Add Widget**, then tap the
-widget and point it at the `Check-ins` folder.
+→ **Shortcuts** → the **large** (8-slot) widget → **Add Widget**, then tap the
+widget and point it at the `Check-ins` folder. The medium widget only holds
+four.
 
-**Or as four icons:** open a shortcut → **⌄** → **Add to Home Screen**.
+**Or as eight icons:** open a shortcut → **⌄** → **Add to Home Screen**.
 
 **Sound.** Each **Show Notification** action has a **Play Sound** toggle. The
 board is deliberately silent, but the phone is not the board — a sound here is
@@ -722,24 +746,24 @@ The **first** time each Shortcut runs, iOS asks whether to allow it to send data
 to `script.google.com`. That prompt is exactly what she should never have to
 answer — and it appears **once per Shortcut**.
 
-**So run all four yourself during setup and approve the prompt then.** Four taps
+**So run all eight yourself during setup and approve the prompt then.** Eight taps
 buys a permanently clean interaction afterwards. The prompt reads *"Allow
 &lt;shortcut&gt; to send data to script.google.com?"* — choose **Allow Always** if it
 is offered, **Allow** otherwise.
 
-While you are there, this is also the test: each of the four should show a
-notification with a real time in it. Then **delete those four test rows from the
-`Log` tab**, or her board will start the day with four green chips she did not
-earn.
+While you are there, this is also the test: each of the eight should show a
+notification with a real time in it. Then **delete those eight test rows from
+the `Log` tab**, or her board will start the day with eight green chips she did
+not earn.
 
 **Where you BUILD them does not matter; where you RUN them does.** An earlier
 version of this page said to build them on her phone, which is more painful than
 it needs to be and was not quite right: the grant is per-shortcut *and*
 per-device, and sharing a shortcut does not carry it across. So the prompt has to
 be answered on her handset either way, and nothing is gained by typing a
-150-character URL four times on someone else's phone.
+150-character URL eight times on someone else's phone.
 
-Build all four wherever there is a real keyboard — your own iPhone, or a Mac —
+Build all eight wherever there is a real keyboard — your own iPhone, or a Mac —
 then share them over (shortcut → **⌄** → **Share** → AirDrop or iCloud link) and
 run each one once on her phone. Per the established two-person pattern: Greg
 building and sharing, whoever is with her tapping each one once and answering
