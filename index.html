@@ -3156,11 +3156,14 @@ if(DEMO) mediaList=DEMO_DATA.media.slice();
    than off. Stamped with TODAY's date, through the same setLog() a fetch uses
    — including its forDate guard — so the demo cannot show a state the real
    board could not. */
+/* Minutes are counted from LA midnight, not the machine's: new Date(y,m,d) is
+   midnight wherever the browser happens to be, so opening the demo from
+   another timezone used to show "Meds AM  11:20 PM". */
 if(DEMO){
-  const t=deviceNow(), base=new Date(t.getFullYear(),t.getMonth(),t.getDate());
+  const t=deviceNow(), base=laLocalToEpoch(isoLA(t),0);
   const seeded={};
   Object.keys(DEMO_DATA.checkins).forEach(function(k){
-    seeded[k]=base.getTime()+DEMO_DATA.checkins[k]*60000;
+    seeded[k]=base+DEMO_DATA.checkins[k]*60000;
   });
   setLog(seeded,isoLA(t));
 }
