@@ -258,6 +258,52 @@
 
   .empty{ font-size:var(--fs); font-weight:600; color:var(--muted); }
 
+  /* ---- CALENDAR VIEW: upcoming only, a screen of its own -------------
+     A third value on the LAYOUT axis (data-layout="calendar"), not a fifth
+     branch. Shown two ways: as a takeover in place of the grid, and as a
+     moment inside the overlay. Both use these same rules and the same card
+     shape, so a size measured for one is true of the other.
+
+     No past, no check mark, no TODAY divider — that is the day board's
+     calendar card, which is untouched. Every row here is upcoming, so every
+     date is in --note-ink, the board's existing "upcoming" colour.
+
+     THREE COLUMNS, chosen by measurement — see HANDOFF.md, "Calendar view".
+     Two was the instinct and was measured first: it is height-bound, every
+     column is half empty to the right, and it holds 30 entries at 16px on
+     the real 1280x650 viewport against three columns' 20px. A few long
+     descriptions wrap in three columns; that costs less than the extra rows
+     two columns need.
+
+     column-count fills DOWN the first column and then down the next. The list
+     is NOT height-constrained (.body > * is flex:0 0 auto), so the columns
+     balance and the list grows TALLER when it is too long, rather than
+     spilling sideways into a third column the card would clip. That is what
+     keeps fitBlock()'s scrollHeight test honest here; fitBlock() is also
+     asked to check scrollWidth for this card, as a backstop measured to
+     catch the sideways case if anything ever does constrain the height. */
+  .calview{ flex:1 1 auto; min-height:0; overflow:hidden;
+            display:flex; flex-direction:column; }
+  .calview > .card, .moment-cal > .card{ flex:1 1 0; }
+  /* Starting value only; fitCalList() overwrites it from CALVIEW_MAX. */
+  #card-calview, #card-calmoment{ --fs:30px; }
+  /* Row spacing 0.25 (the day card uses 0.40) and the date slot 5.5 (the day
+     card uses 6.0) are both measured trades: together they are worth 1-2px
+     of type at 30-40 entries. 5.5 is the widest label there is ("Mon, May
+     10", measured at 5.29) plus a little. */
+  .calv{ list-style:none; display:block; column-count:3;
+         column-gap:calc(var(--fs)*1.6); column-rule:2px solid var(--line); }
+  .calv li{ display:flex; gap:calc(var(--fs)*0.42); align-items:baseline; line-height:1.16;
+            break-inside:avoid; margin-bottom:calc(var(--fs)*0.25); }
+  /* Last resort before dropping entries — see fitCalList(). */
+  .calv.split li{ break-inside:auto; }
+  .calv .when{ flex:0 0 calc(var(--fs)*5.5); font-size:calc(var(--fs)*0.86);
+               font-weight:700; color:var(--note-ink); white-space:nowrap; }
+  /* min-width:0 + break-word: a description with one enormous word must wrap
+     inside its own column, never push the column wider than the card. */
+  .calv .what{ flex:1 1 auto; min-width:0; font-size:var(--fs); font-weight:600;
+               overflow-wrap:break-word; }
+
   /* ---- SINGLE MESSAGE: the other layout axis -------------------------
      One dominant sentence where the grid would otherwise be. Used by BOTH
      night and focus, so the fit/clip invariants are solved once rather than
@@ -372,6 +418,17 @@
     flex:0 0 auto; max-width:92%; text-align:center;
     font-size:var(--fs); font-weight:700; line-height:1.18; color:var(--ink);
   }
+
+  /* The third thing that can be in the overlay: the calendar view. Unlike a
+     photo or a message it does NOT cover the whole stage. setMomentArea()
+     shrinks the overlay to the grid's own box for this kind only, so the
+     header (date and clock) and the reassurance line stay on screen — a list
+     of "Tomorrow" and "Wed, Nov 4" means little without "Today is…" beside
+     it. Still the one overlay and the one momentState; only its rectangle
+     changes, and endMoment() always puts it back to inset:0. */
+  .moment.cal{ padding:0; align-items:stretch; justify-content:stretch; }
+  .moment-cal{ flex:1 1 auto; min-height:0; width:100%;
+               display:flex; flex-direction:column; }
 
   /* ---- ?debug=1 readout ----
      Fixed to the VIEWPORT and deliberately outside .stage: it must never
@@ -542,6 +599,15 @@
         <div class="msg" id="single-msg"></div>
       </div>
 
+      <!-- The third layout: upcoming calendar entries only, where the grid
+           was. Same header above it and the same reassurance line below. -->
+      <div class="calview" id="calview" hidden>
+        <div class="card" id="card-calview">
+          <div class="cap">COMING UP</div>
+          <div class="body"><ul class="calv" id="calview-list"></ul></div>
+        </div>
+      </div>
+
       <div class="reassure" id="reassure">Everything is okay. You are safe and loved.</div>
 
       <!-- Moment overlay: an occasional thing laid above everything else,
@@ -549,8 +615,10 @@
            without needing z-index tricks beyond the belt-and-braces one in
            the CSS.
 
-           Two kinds live in here and exactly one is ever visible: a photo
-           (image wrap + caption) or a gentle message (message box). Sharing
+           Three kinds live in here and exactly one is ever visible: a photo
+           (image wrap + caption), a gentle message (message box), or the
+           calendar view (moment-cal, with the overlay shrunk to the grid's
+           box so the header stays — see setMomentArea). Sharing
            one overlay is what makes "two things rotating" impossible rather
            than merely unlikely.
 
@@ -561,6 +629,12 @@
         <div class="moment-img-wrap" id="moment-img-wrap"><img id="photo-img" alt=""></div>
         <div class="photo-cap-box" id="photo-cap-box"><div class="photo-cap" id="photo-cap"></div></div>
         <div class="moment-msg-box" id="moment-msg-box" hidden><div class="moment-msg" id="moment-msg"></div></div>
+        <div class="moment-cal" id="moment-cal" hidden>
+          <div class="card" id="card-calmoment">
+            <div class="cap">COMING UP</div>
+            <div class="body"><ul class="calv" id="calmoment-list"></ul></div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -839,16 +913,81 @@ function clampGentleHoldSec(v){
   const base=(isFinite(n)&&n>0)?n:GENTLE_HOLD_SEC_DEFAULT;
   return Math.min(GENTLE_HOLD_SEC_CEILING,Math.max(GENTLE_HOLD_SEC_FLOOR,base));
 }
-/* The shared scheduler ticks at whichever cadence is currently faster, so its
-   floor has to be whichever floor is lower — derived, never a third number to
-   keep in step by hand. */
-const MOMENT_EVERY_MIN_FLOOR = Math.min(MEDIA_EVERY_MIN_FLOOR,GENTLE_EVERY_MIN_FLOOR);
 /* Deliberately below MSG_MAX (160). A takeover wants to be as large as the
    panel allows, because being unmissable is its whole job; a gentle message
    wants to be unmistakably readable and then get out of the way. PROVISIONAL
    in the same way MSG_MAX_NIGHT is: the right number is a thing to look at on
    the real panel, not to reason out here. */
 const GENTLE_MSG_MAX = 96;
+
+/* ---- CALENDAR VIEW ---------------------------------------------------
+   Upcoming entries only, on a screen of their own. Two ways to reach it,
+   chosen by ONE Settings cell, calendarView:
+
+     takeover  a LAYOUT. selectMode() puts the calendar view where the grid
+               was, for as long as the cell says so. Below focus and below the
+               bedroom's night screen; above the full board.
+     rotate    a MOMENT. A third kind on the same scheduler, overlay, state and
+               hard cap as photos and gentle messages — never its own timer.
+
+   Opt-IN, exactly like media: absent, blank, or anything other than exactly
+   one of those two words means OFF. A typo has to fail to "off", never to
+   "takeover" — a takeover that nobody meant would hide the routine, the notes
+   and the check-ins all day, on a screen nobody in the house can debug.
+
+   calendarScreens narrows it to named screens, through the same token rule
+   as Media's Screens column and ?screen= itself. Blank means every screen. */
+function calendarScreenAllowed(){
+  const raw=String(settings.calendarscreens||'').trim();
+  if(!raw) return true;
+  return raw.split(/[,\s]+/).map(normScreenToken).indexOf(SCREEN)>=0;
+}
+/** 'takeover' | 'rotate' | '' — and '' is the only answer to anything else. */
+function calendarViewSetting(){
+  const v=String(settings.calendarview||'').trim().toLowerCase();
+  if(v!=='takeover'&&v!=='rotate') return '';
+  return calendarScreenAllowed()?v:'';
+}
+/* Rotation numbers, clamped exactly like the media pair and with the same
+   floor and ceiling. The hold is longer than a gentle message's by default
+   because a list takes longer to read than one sentence; the ceiling is the
+   same 60s, past which it is a takeover — and a takeover is the other value
+   of the same cell. */
+const CAL_EVERY_MIN_DEFAULT = 20;
+const CAL_EVERY_MIN_FLOOR   = 2;
+const CAL_HOLD_SEC_DEFAULT  = 30;
+const CAL_HOLD_SEC_FLOOR    = 5;
+const CAL_HOLD_SEC_CEILING  = 60;
+function clampCalEveryMin(v){
+  const n=parseFloat(v);
+  const base=(isFinite(n)&&n>0)?n:CAL_EVERY_MIN_DEFAULT;
+  return Math.max(CAL_EVERY_MIN_FLOOR,base);
+}
+function clampCalHoldSec(v){
+  const n=parseFloat(v);
+  const base=(isFinite(n)&&n>0)?n:CAL_HOLD_SEC_DEFAULT;
+  return Math.min(CAL_HOLD_SEC_CEILING,Math.max(CAL_HOLD_SEC_FLOOR,base));
+}
+/* Lowest priority of the three moments, but not starvable. Photos and gentle
+   messages keep their order between themselves exactly as before; the
+   calendar only takes a slot when neither of them wants it — UNLESS it has
+   already been passed over this many times while ready, in which case it goes
+   first. Without this, any gentle cadence at or below the calendar's would
+   take every single slot (its own due-time is set short of a full cadence, so
+   it is due at every tick) and the calendar would never appear at all. */
+const CAL_STARVE_SLOTS = 2;
+/* The shared scheduler ticks at whichever cadence is currently fastest, so its
+   floor has to be whichever floor is lowest — derived, never another number to
+   keep in step by hand. (Moved below the calendar block so all three floors
+   exist by the time it is read.) */
+const MOMENT_EVERY_MIN_FLOOR = Math.min(MEDIA_EVERY_MIN_FLOOR,GENTLE_EVERY_MIN_FLOOR,CAL_EVERY_MIN_FLOOR);
+
+/* Type and count. The ceiling sits above the day card's 26 because this card
+   has the whole width; the floor is the day card's own 14. The CAP is the
+   most entries ever placed: anything beyond it is logged, never silently
+   dropped, the same way calendarWindow() logs. See HANDOFF.md for the sweep
+   these were picked from. */
+const CALVIEW_MAX = 30, CALVIEW_MIN = 14, CALVIEW_CAP = 40;
 
 /* Bare filenames in the Sheet's File column resolve against this — the repo's
    own /media/ folder, relative to wherever the page itself is served, so it
@@ -981,6 +1120,11 @@ const TEST_CHECKINS = /(^|[?&])checkins=1(&|$)/.test(location.search);
              &gentleeverymin=3    ...coming round this often
              &gentleholdsec=8     ...and staying this long
              &gentlenow=1         show it right now instead of waiting
+     ?demo=1&calview=takeover     the calendar view as a takeover
+                    =rotate       ...or as a rotating moment
+             &caleverymin=3       ...coming round this often   (clamped)
+             &calholdsec=8        ...and staying this long     (clamped)
+             &calnow=1            show it right now instead of waiting
 
    Gated on DEMO so a bookmarked TV URL can never trip one of them, and so
    nothing here is reachable on the live board by a stray query string. */
@@ -991,15 +1135,18 @@ const TEST_NIGHT = DEMO?paramOf('night'):'';
    unlabelled display must appear in the Status tab as "unnamed" rather than
    quietly not being counted — a screen missing from the list is indistinguish-
    able from a screen that never checked in. */
-const SCREEN=(function(){
-  const id=paramOf('screen').toLowerCase().trim()
+/* The same rule as normScreenToken() in apps-script.gs, character for
+   character, so ?screen= and any Sheet list of screen names (calendarScreens)
+   can never disagree about what a name normalises to. */
+function normScreenToken(v){
+  return String(v==null?'':v).toLowerCase().trim()
     .replace(/[\s_]+/g,'-')
     .replace(/[^a-z0-9-]/g,'')
     .replace(/-{2,}/g,'-')
     .replace(/^-+|-+$/g,'')
     .slice(0,24);
-  return id||'unnamed';
-})();
+}
+const SCREEN=normScreenToken(paramOf('screen'))||'unnamed';
 const DEMO_DATA = {
   today:[ 'Researching care options','OnPoint Credit Union','Best Buy','Gratitude' ],
   notes:[ 'Greg is here for {days:2026-08-20}. Then Kathy comes. Then Chris.' ],
@@ -1015,6 +1162,32 @@ const DEMO_DATA = {
     { date:'2026-08-27', what:'Pest control follow-up' },
     { date:'2026-09-02', what:'2:00 pm  Dental cleaning' },
     { date:'2026-09-17', what:'3:10 pm  Eyehealth NW' },
+  ],
+  /* The calendar view's real case: ~35 upcoming entries, as DAY OFFSETS from
+     the demo's today rather than fixed dates, so the demo never goes stale
+     the way the fixed August rows above have. Appended to `calendar` at boot
+     (after &now= is applied). Deliberately realistic: time-prefixed and bare,
+     several same-day pairs, and a few long enough to wrap. Offset 0 is TODAY,
+     which counts as upcoming and is what a &now= midnight crossing removes. */
+  upcoming:[
+    [0,'10:00 am  Hair appointment'], [0,'2:30 pm  Call with Kathy'],
+    [1,'1:30 pm  Dentist – crown'], [2,'Kathy arrives'],
+    [3,'11:00 am  PT with Cindy'], [3,'3:30 pm  Realtor – Elaine Simms'],
+    [5,'Pest control follow-up'], [6,'2:00 pm  Dental cleaning'],
+    [8,'3:10 pm  Eyehealth NW – bring the old glasses and the list of drops'],
+    [9,'Chris visits'],
+    [10,'9:30 am  Blood draw (fasting – no breakfast until after)'],
+    [10,'1:00 pm  Lunch with Margaret at the Garden Café'],
+    [12,'Library books due'], [13,'11:15 am  Dr. Amal'], [15,'Gutter cleaning'],
+    [16,'10:00 am  PT with Cindy'], [16,'4:00 pm  Haircut'], [17,'Kathy leaves'],
+    [19,'2:00 pm  Retina NW'], [20,'Greg arrives'], [22,"Book club at Joan's"],
+    [23,'10:30 am  Hearing aid check'], [23,'3:00 pm  Church choir concert'],
+    [26,"Dinner at Kathy's"], [27,'Pharmacy – pick up refill'],
+    [29,'1:30 pm  Podiatrist'], [30,"Chris's birthday"],
+    [33,'11:00 am  Bank – Elaine Simms about the account'], [34,'Furnace service'],
+    [36,'2:15 pm  Dermatology – follow-up on the spot on her left arm'],
+    [37,'10:00 am  PT with Cindy'], [40,'Greg leaves'], [41,'3:30 pm  Eyehealth NW'],
+    [44,'Window washers'], [47,'1:00 pm  Dr. Amal – annual']
   ],
   /* One real, decodable placeholder (see media/README.md — not a photo) so
      the demo path exercises the actual same-origin fetch, and one file that
@@ -1135,12 +1308,21 @@ function expandList(list,todayISO){
 /* Measures the whole .body, so anything inside it (the list AND the standing
    prompt) is accounted for. Measuring only the list is how the standing
    prompt was able to overflow the card unnoticed. */
-function fitBlock(cardId, max, min){
+/* `wide` adds a WIDTH test, for multi-column content only. A multi-column box
+   whose height is constrained overflows SIDEWAYS, into an extra column, and
+   scrollHeight never grows — so the height test alone would report a clipped
+   list as fitting. Off for every existing card, so they measure exactly as
+   they always have. */
+function fitBlock(cardId, max, min, wide){
   const card=document.getElementById(cardId);
   const body=card.querySelector('.body');
+  function over(){
+    return body.scrollHeight>body.clientHeight ||
+           (!!wide && body.scrollWidth>body.clientWidth+1);
+  }
   let s=max;
   card.style.setProperty('--fs',s+'px');
-  while(s>min && body.scrollHeight>body.clientHeight){
+  while(s>min && over()){
     s-=1; card.style.setProperty('--fs',s+'px');
   }
   return s;
@@ -1262,6 +1444,87 @@ function calRow(e, todayISO, done, repeat){
   li.appendChild(mark); li.appendChild(when); li.appendChild(what);
   return li;
 }
+/* ---- CALENDAR VIEW rendering ---------------------------------------
+   Upcoming = dated today or later. Today's own entries count, and drop off at
+   midnight by this comparison alone — no fetch, no network, the same way the
+   day card moves them above its divider. Pure: no logging, because selectMode()
+   asks it every second. */
+function upcomingEvents(items,todayISO){
+  return (items||[])
+    .filter(function(e){ return e&&isoToUTCDate(e.date)&&String(e.what||'').trim()&&e.date>=todayISO; })
+    .slice().sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:0; });
+}
+/* The one place both the board and the calendar view get their entries from,
+   so the two can never be looking at different lists. */
+function calendarSource(){
+  if(DEMO) return DEMO_DATA.calendar;
+  return (events&&events.list)||[];
+}
+function calViewRow(e,todayISO,repeat){
+  const li=document.createElement('li');
+  li.className='ahead';
+  if(repeat) li.setAttribute('data-repeat','1');
+  const when=document.createElement('span'); when.className='when';
+  when.textContent=repeat?'':whenLabel(e.date,todayISO);
+  const what=document.createElement('span'); what.className='what'; what.textContent=e.what;
+  li.appendChild(when); li.appendChild(what);
+  return li;
+}
+/** Render upcoming entries into one calendar-view card and fit it. Returns
+ *  how many were placed (0 = nothing upcoming). Used by BOTH the takeover and
+ *  the moment, so the two can never fit differently. */
+function fitCalList(cardId,listId,todayISO){
+  const ul=document.getElementById(listId);
+  const all=upcomingEvents(calendarSource(),todayISO);
+  const list=all.slice(0,CALVIEW_CAP);
+  function build(n){
+    ul.innerHTML='';
+    let prev=null;
+    list.slice(0,n).forEach(function(e){
+      ul.appendChild(calViewRow(e,todayISO,e.date===prev)); prev=e.date;
+    });
+  }
+  let n=list.length;
+  build(n);
+  fitBlock(cardId,CALVIEW_MAX,CALVIEW_MIN,true);
+  /* Still too long at the floor. Only ever reached by abusive text — the cap
+     is chosen so a realistic list fits well above the floor.
+
+     First let entries SPLIT across the column break. A single pasted-in
+     paragraph taller than a whole column can never be placed while every
+     entry must stay in one piece, and dropping from the end could then never
+     succeed until the list was cut back past it: measured, one such entry
+     took a 30-entry list down to 6 at 1280x510. Split, it takes its share.
+
+     Then, if it STILL clips, shorten the list rather than clip it. The
+     furthest-future go first, they reappear as they come closer, and every
+     entry left out is logged below. */
+  const body=document.getElementById(cardId).querySelector('.body');
+  function clips(){ return body.scrollHeight>body.clientHeight+1||body.scrollWidth>body.clientWidth+1; }
+  ul.classList.remove('split');
+  if(clips()){ ul.classList.add('split'); fitBlock(cardId,CALVIEW_MAX,CALVIEW_MIN,true); }
+  while(n>1&&clips()){ n-=1; build(n); }
+  const hidden=all.length-n;
+  if(hidden>0&&window.console&&console.info){
+    console.info('board: calendar view: '+hidden+' upcoming entr'+(hidden===1?'y':'ies')+
+                 ' not shown ('+all.length+' upcoming, cap '+CALVIEW_CAP+
+                 (n<list.length?', '+(list.length-n)+' more removed so nothing clips':'')+')');
+  }
+  calViewHidden=hidden;
+  /* A same-day pair split by the column break would leave the second half at
+     the top of the next column with no date at all. Found by POSITION after
+     layout, because only the browser knows where the break fell; reprinting
+     a label in the fixed-width date slot cannot change any row's height, so
+     it cannot move the break it is responding to. */
+  const lis=ul.children;
+  for(let i=1;i<lis.length;i++){
+    if(lis[i].getAttribute('data-repeat')==='1'&&lis[i].offsetLeft!==lis[i-1].offsetLeft){
+      lis[i].firstChild.textContent=whenLabel(list[i].date,todayISO);
+    }
+  }
+  return n;
+}
+
 /* A pipe — or a newline typed with Alt+Enter — forces a line break WITHIN one
    item, so family can control where a sentence wraps. In the Days tab a newline
    already splits into separate notes, so there it is the pipe that matters; in
@@ -1286,6 +1549,7 @@ function emptyRow(text){
 function showLayout(which){
   document.getElementById('grid').hidden   = which!=='full';
   document.getElementById('single').hidden = which!=='single';
+  document.getElementById('calview').hidden= which!=='calendar';
   /* The strip belongs to the full board only. A focus takeover and the night
      message both exist to REPLACE the board with one sentence; a row of chips
      underneath either of them would be precisely the clutter they are there
@@ -1307,6 +1571,17 @@ function renderSingle(text,bottomLine,ceiling){
   re.hidden=!bottomLine;
   if(bottomLine) re.textContent=bottomLine;
   fitMessage('single','single-msg',ceiling,MSG_MIN);
+}
+
+/* The calendar-view takeover. Header above, reassurance line below — with the
+   staleness note, since model.reassure already carries it — and upcoming
+   entries in between. */
+function renderCalView(model,todayISO){
+  showLayout('calendar');
+  const re=document.getElementById('reassure');
+  re.hidden=false;
+  re.textContent=model.reassure||DEFAULT_REASSURE;
+  fitCalList('card-calview','calview-list',todayISO);
 }
 
 /* Rebuilt on every full paint rather than diffed: four elements, and the
@@ -1565,13 +1840,17 @@ let mediaQueue=[];            /* shuffled remaining picks, no immediate repeat *
 let mediaLastShownFile='';
 let mediaFailedAt={};         /* file -> Date.now() of its last decode failure */
 let momentState='idle';        /* idle | loading | showing | fading-out       */
-let momentKind='';            /* what is in the overlay: '' | photo | gentle  */
+let momentKind='';            /* in the overlay: '' | photo | gentle | calendar */
 /* Each kind of moment keeps its OWN due-time; the shared scheduler ticks at
    whichever cadence is faster and hands each slot to whatever is due. Two
    clocks, one timer — see attemptMoment(). Both start at 0, i.e. due at the
    very first slot, which is what makes the no-gentle-message case behave
    exactly as it did before any of this existed. */
 let photoDueAt=0, gentleDueAt=0;
+/* The calendar view's due-time, on the same raw clock, plus how many slots in
+   a row it has been ready for and lost — see CAL_STARVE_SLOTS. */
+let calendarDueAt=0, calPassedOver=0;
+let calViewHidden=0;          /* upcoming entries the last fit left out, for ?debug=1 */
 let photoLoadToken=0;         /* invalidates a preload that resolves too late */
 let momentTimer=null;          /* the scheduling timer (self-rescheduling)     */
 let momentArmedEveryMin=0;     /* the cadence momentTimer was armed with        */
@@ -1719,15 +1998,17 @@ function loadData(){
     });
 }
 
-/* 7. DISPLAY MODES — two independent axes, three combinations.
+/* 7. DISPLAY MODES — two independent axes.
    ------------------------------------------------------------------
      PALETTE   day (warm paper/ink)  |  night (near-black, amber)
-     LAYOUT    full (header+grid+reassurance)  |  single-message
+     LAYOUT    full (header+grid+reassurance)  |  single-message  |  calendar
 
      day board  = day   + full            (what has always been here)
      night      = night + single-message  (the night orientation text)
      focus      = day   + single-message  (an ad-hoc takeover)
                   ...or night + single-message, at 3am in the bedroom.
+     calendar   = day or night + calendar (Settings.calendarView = takeover:
+                  header + upcoming entries + reassurance)
 
    Evaluated on every paint, never latched, so nothing has to be switched
    off again by the thing that switched it on.
@@ -1843,10 +2124,23 @@ function selectMode(now,todayISO){
      currently warrants — dark at 3am, warm at 2pm. Unchanged by this split. */
   if(focus) return { mode:'focus', layout:'single', night:night, message:focus };
 
-  if(night){                                    /* axis 2: layout, per screen */
-    if(screenMode().nightLayout==='single')
-      return { mode:'night', layout:'single', night:true,
-               message:nightMessage(todayISO) };
+  if(night&&screenMode().nightLayout==='single')  /* axis 2: layout, per screen */
+    return { mode:'night', layout:'single', night:true,
+             message:nightMessage(todayISO) };
+
+  /* The calendar-view takeover: a third value on the LAYOUT axis, in
+     whichever palette the screen is in (so the living areas get it dark
+     after nightStart). Below focus, so it never hides an acute message;
+     below the bedroom's night screen, so it never lights a dark bedroom.
+
+     With nothing upcoming it does NOT take the screen: an empty "COMING UP"
+     card all day would say nothing and hide everything else the board says.
+     It falls back to the full board, and because this is re-asked every
+     second it comes back on its own the moment an entry is added. */
+  if(calendarViewSetting()==='takeover'&&upcomingEvents(calendarSource(),todayISO).length)
+    return { mode:night?'night':'day', layout:'calendar', night:night, message:'' };
+
+  if(night){
     /* The living-area case: same board, same content, dimmed. No message —
        there is nothing to say that the board is not already saying. */
     return   { mode:'night', layout:'full',   night:true, message:'' };
@@ -1930,8 +2224,9 @@ function applyMode(m){
       tells her anything is the case.
    5. ONE moment at a time, structurally. One scheduler, one overlay, one
       momentState, and attemptMoment() returns immediately unless that state
-      is 'idle'. A photo and a gentle message cannot both be on screen, and
-      neither can two of either. Nothing arbitrates between them at paint
+      is 'idle'. A photo, a gentle message and the calendar view (the third
+      kind, added later on these same terms) cannot share the screen, and
+      neither can two of any one. Nothing arbitrates between them at paint
       time because nothing has to. */
 
 /* The master switch is checked fresh every attempt, never cached — that is
@@ -2013,10 +2308,19 @@ function noteMoment(what){ momentLast=what; momentLastAt=Date.now(); }
    timer alongside it — photos keep their own slower clock (photoDueAt) and
    simply take the slots they are due for. */
 function momentEveryMin(){
-  const media=clampMediaEveryMin(settings.mediaeverymin);
-  const now=deviceNow();
-  if(!activeGentle(isoLA(now),now)) return media;
-  return Math.min(media,clampGentleEveryMin(settings.gentleeverymin));
+  let every=clampMediaEveryMin(settings.mediaeverymin);
+  const now=deviceNow(), todayISO=isoLA(now);
+  if(activeGentle(todayISO,now)) every=Math.min(every,clampGentleEveryMin(settings.gentleeverymin));
+  /* The calendar tightens the rotation the same way, and only while it could
+     actually run here — switched to rotate, for this screen, with something
+     upcoming. Off, it changes nothing, so the photo/gentle cadence is exactly
+     what it was before this kind existed. */
+  if(calendarRotateLive(todayISO)) every=Math.min(every,clampCalEveryMin(settings.calendareverymin));
+  return every;
+}
+/** Could a calendar moment be shown at all on this screen today, gates aside? */
+function calendarRotateLive(todayISO){
+  return calendarViewSetting()==='rotate'&&upcomingEvents(calendarSource(),todayISO).length>0;
 }
 function scheduleNextMomentAttempt(){
   if(momentTimer) clearTimeout(momentTimer);
@@ -2065,6 +2369,22 @@ function attemptMoment(){
   const gentleText=momentBlocked?'':activeGentle(todayISO,now);
   const gentleReady=!!gentleText&&(t>=gentleDueAt);
 
+  /* The calendar view: same "could this actually run" rule — switched on for
+     this screen, past the shared gate, AND something upcoming to show. An
+     empty calendar is not a moment and must not take the slot. */
+  const calLive=!momentBlocked&&calendarRotateLive(todayISO);
+  const calReady=calLive&&(t>=calendarDueAt);
+  /* Starved: it has been ready and lost CAL_STARVE_SLOTS slots running, so
+     it goes first this once. The others' due-times are left alone, so
+     whichever it displaced takes the very next slot. */
+  if(calReady&&calPassedOver>=CAL_STARVE_SLOTS){
+    beginCalendarSlot('starved');
+    return;
+  }
+  /* Whatever happens below, a ready calendar that does not get the slot has
+     been passed over once more. */
+  if(calReady&&(photoReady||gentleReady)) calPassedOver++;
+
   /* A photo wins a tie, deliberately. It is the rarer event and there are only
      a handful of them; the gentle message comes back round within minutes by
      construction, so yielding a slot costs it almost nothing and starves it of
@@ -2079,6 +2399,8 @@ function attemptMoment(){
     beginGentleMoment(gentleText);
     return;
   }
+  /* Lowest priority: only a slot nobody else wanted. */
+  if(calReady){ beginCalendarSlot('free'); return; }
   /* Silent, and a normal, frequent outcome. Named for ?debug=1 only — the
      board looks identical whichever of these it was. The gate that stops
      EVERYTHING is the headline when it applies; otherwise both sides report,
@@ -2087,7 +2409,13 @@ function attemptMoment(){
      miles away. */
   noteMoment('skipped: '+(momentBlocked||
     ('photo '+(photoBlocked||(eligiblePhotos().length?'not due':'none eligible'))+
-     ', gentle '+(gentleText?'not due':'none'))));
+     ', gentle '+(gentleText?'not due':'none')+
+     ', calendar '+(calLive?'not due':(calendarViewSetting()==='rotate'?'nothing upcoming':'off')))));
+}
+function beginCalendarSlot(why){
+  calendarDueAt=dueIn(clampCalEveryMin(settings.calendareverymin));
+  calPassedOver=0;
+  beginCalendarMoment(why);
 }
 
 /** new Image() + decode(), never the real on-screen <img>, so a failure never
@@ -2223,6 +2551,66 @@ function beginGentleMoment(text){
   momentHardCapTimer=setTimeout(forceEndMoment,MOMENT_HARD_CAP_MS);
 }
 
+/* The overlay's rectangle. inset:0 (the whole stage) for a photo or a gentle
+   message, exactly as before; for the calendar view, the GRID's own box, so
+   the header and the reassurance line stay visible around it. Measured from
+   the grid rather than written as a CSS calc because the reassurance line's
+   height is not fixed — it gains a staleness note when the data is old.
+
+   This is also all it would take to give a gentle message the header (an
+   open question in HANDOFF.md): call setMomentArea(true) in its begin path. */
+function setMomentArea(underHead){
+  const el=document.getElementById('moment');
+  el.classList.toggle('cal',!!underHead);
+  if(!underHead){
+    el.style.top=el.style.left=el.style.width=el.style.height='';
+    return true;
+  }
+  const grid=document.getElementById('grid');
+  if(grid.hidden||!grid.offsetHeight) return false;
+  el.style.top=grid.offsetTop+'px';   el.style.height=grid.offsetHeight+'px';
+  el.style.left=grid.offsetLeft+'px'; el.style.width=grid.offsetWidth+'px';
+  return true;
+}
+/** Render (or re-render) the calendar moment from CURRENT events and the
+ *  current date — never a snapshot. Called at the start and on every paint
+ *  while it is up, so a fetch or a midnight mid-hold is reflected at once. */
+function renderCalMoment(todayISO){
+  /* Nothing left upcoming: leave the last list in place for the second it
+     takes checkMomentInterrupt() to fade it, rather than flash an empty card. */
+  if(!upcomingEvents(calendarSource(),todayISO).length) return 0;
+  if(!setMomentArea(true)) return 0;
+  return fitCalList('card-calmoment','calmoment-list',todayISO);
+}
+/* No preload, like a gentle message: the content is already here. Hold, fade,
+   hard cap and interrupt are the shared machinery, unchanged. */
+function beginCalendarMoment(why){
+  const momentEl=document.getElementById('moment');
+  document.getElementById('moment-img-wrap').hidden=true;
+  document.getElementById('photo-cap-box').style.display='none';
+  document.getElementById('moment-msg-box').hidden=true;
+  document.getElementById('moment-cal').hidden=false;
+  /* Fitted after the box is un-hidden, at opacity 0 — laid out, measurable,
+     not yet visible. */
+  const n=renderCalMoment(isoLA(deviceNow()));
+  if(!n){ endMoment(); noteMoment('calendar: nothing to show'); return; }
+
+  momentKind='calendar';
+  momentState='showing';
+  noteMoment('calendar shown ('+why+')');
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      if(momentState==='showing') momentEl.classList.add('show');
+    });
+  });
+
+  const holdMs=clampCalHoldSec(settings.calendarholdsec)*1000;
+  clearTimeout(momentHoldTimer);
+  momentHoldTimer=setTimeout(beginMomentFadeOut,holdMs);
+  clearTimeout(momentHardCapTimer);
+  momentHardCapTimer=setTimeout(forceEndMoment,MOMENT_HARD_CAP_MS);
+}
+
 function beginMomentFadeOut(){
   if(momentState!=='showing') return;
   momentState='fading-out';
@@ -2251,6 +2639,11 @@ function endMoment(){
   document.getElementById('moment-msg').textContent='';
   document.getElementById('moment-msg-box').hidden=true;
   document.getElementById('moment-img-wrap').hidden=false;
+  /* The calendar half, and the overlay's rectangle back to inset:0 — so the
+     next moment, whatever kind, starts from the shape it always had. */
+  document.getElementById('calmoment-list').innerHTML='';
+  document.getElementById('moment-cal').hidden=true;
+  setMomentArea(false);
   momentKind='';
   momentState='idle';
 }
@@ -2262,6 +2655,12 @@ function forceEndMoment(){ endMoment(); }   /* named for what fired it, under ?d
  *  a moment already on screen. */
 function checkMomentInterrupt(now,todayISO){
   if(momentState!=='showing') return;
+  if(momentKind==='calendar'){
+    /* The shared gate, the cell being switched off, or nothing left upcoming
+       (the last of today's entries at midnight) — each pulls it at once. */
+    if(momentBlockedBy(now,todayISO)||!calendarRotateLive(todayISO)) beginMomentFadeOut();
+    return;
+  }
   if(momentKind==='gentle'){
     /* Two reasons to pull it, and the second is the one that matters: a
        gentle message reaches its until-instant exactly as a takeover does,
@@ -2279,13 +2678,13 @@ function paint(){
   const todayISO=isoLA(now);
   const model=safeFallback();
 
+  /* Dated events survive regardless of the day row's age. Read through
+     calendarSource() so the calendar view sees exactly this list. */
+  model.calendar=calendarSource();
   if(DEMO){
     model.today=DEMO_DATA.today; model.notes=DEMO_DATA.notes;
-    model.calendar=DEMO_DATA.calendar;
     model.reassure=DEMO_DATA.reassure;
   }else{
-    /* Dated events survive regardless of the day row's age. */
-    if(events&&events.list) model.calendar=events.list;
     model.reassure=settings.reassure||DEFAULT_REASSURE;
 
     /* The day row is only usable if it is actually for TODAY. At midnight
@@ -2318,9 +2717,15 @@ function paint(){
        deliberately has neither. */
     const focus=(m.mode==='focus');
     renderSingle(m.message, focus?model.reassure:'', focus?MSG_MAX:MSG_MAX_NIGHT);
+  }else if(m.layout==='calendar'){
+    renderCalView(model,todayISO);
   }else{
     renderFull(model,todayISO);
   }
+  /* A calendar moment on screen is re-rendered from the same current state,
+     never left showing what was true when it started. After the board, so it
+     measures against the grid as it now is. */
+  if(momentKind==='calendar'&&momentState!=='idle') renderCalMoment(todayISO);
 }
 
 /* 10. CLOCK + date line + mode changes */
@@ -2547,11 +2952,33 @@ function debugPaint(){
       return c.kind.replace('medicine-','med ')+' '+
              ((typeof at==='number'&&at>0)?fmtTime.format(new Date(at)):'\u2014');
     }).join('  ');
+  /* The calendar view, and above all WHY it is quiet: "off", "not this
+     screen", "yielded to focus", "nothing upcoming" and "waiting its turn"
+     all look the same from a camera \u2014 the ordinary board. */
+  const cvRaw=String(settings.calendarview||'').trim();
+  const cvSet=calendarViewSetting();
+  const cvUp=upcomingEvents(calendarSource(),todayD).length;
+  let cvState;
+  if(!cvSet){
+    cvState=!cvRaw?'off':(calendarScreenAllowed()?'off (unrecognised "'+cvRaw+'")':'off (not this screen)');
+  }else if(cvSet==='takeover'){
+    cvState='takeover '+(parts[1]==='calendar'?'SHOWING':
+      (!cvUp?'yielded: nothing upcoming':'yielded: '+(parts[0]==='focus'?'focus':parts[1]==='single'?'night screen':'?')));
+  }else{
+    cvState='rotate '+(momentKind==='calendar'?'SHOWING':
+      (gBlocked?'['+gBlocked+']':!cvUp?'quiet: nothing upcoming':
+       (Date.now()>=calendarDueAt?'due, waiting for slot '+next:'due '+shortIn(calendarDueAt))+
+       (calPassedOver?'   passed over '+calPassedOver:'')))+
+      '   every '+clampCalEveryMin(settings.calendareverymin)+'m'+
+      '   hold '+clampCalHoldSec(settings.calendarholdsec)+'s';
+  }
+  const calLine='\nCALVIEW '+cvState+'   upcoming '+cvUp+
+    (calViewHidden?'   not shown '+calViewHidden:'');
   dbgEl.textContent=
     'WAKE '+wakeState+age+why+'   releases '+wakeReleases+fsLine+'\n'+
     SCREEN+'   data '+shortAgo(lastOkAt)+'   beat '+hbState+
     '   mode '+mode+until+
-    '   '+window.innerWidth+'\u00d7'+window.innerHeight+momentLine+gentleLine+checkLine;
+    '   '+window.innerWidth+'\u00d7'+window.innerHeight+momentLine+gentleLine+checkLine+calLine;
 }
 
 /* 14. FIT — fill the screen.
@@ -2659,6 +3086,23 @@ function applyTestHooks(){
      would show a picture. This skips the SLOT ALLOCATION only — the gate and
      the expiry check are both still asked, exactly as attemptMoment() asks
      them. */
+  /* The calendar view. calview goes through the SAME calendarViewSetting()
+     a Sheet value does, so &calview=takover is off here exactly as it would
+     be off in the Sheet. The cadence and hold still pass their clamps. */
+  const cv=paramOf('calview'); if(cv) settings.calendarview=cv;
+  const cvm=paramOf('caleverymin'); if(cvm) settings.calendareverymin=cvm;
+  const cvh=paramOf('calholdsec'); if(cvh) settings.calendarholdsec=cvh;
+  /* Bypasses the WAIT and the slot allocation only, like &gentlenow=1: the
+     shared gate and the "anything upcoming" check are both still asked. */
+  if(/(^|[?&])calnow=1(&|$)/.test(location.search)){
+    setTimeout(function(){
+      const now=deviceNow(), todayISO=isoLA(now);
+      const blocked=momentBlockedBy(now,todayISO);
+      const live=!blocked&&calendarRotateLive(todayISO);
+      if(live&&momentState==='idle') beginCalendarSlot('calnow');
+      else noteMoment('calnow: '+(blocked||(calendarViewSetting()==='rotate'?'nothing upcoming':'calendar view not set to rotate')));
+    },50);
+  }
   if(/(^|[?&])gentlenow=1(&|$)/.test(location.search)){
     setTimeout(function(){
       const now=deviceNow(), todayISO=isoLA(now);
@@ -2697,6 +3141,13 @@ if(DEMO){
   setLog(seeded,isoLA(t));
 }
 applyTestHooks();             /* after restore(), so a hook always wins    */
+/* After the hooks, so the offsets count from &now='s day when it is set. */
+if(DEMO){
+  const today=isoLA(deviceNow());
+  DEMO_DATA.calendar=DEMO_DATA.calendar.concat(DEMO_DATA.upcoming.map(function(u){
+    return { date:shiftISO(today,u[0]), what:u[1] };
+  }));
+}
 fit();
 tick();                       /* paints from restored/empty state at once */
 loadData();
@@ -2747,7 +3198,8 @@ function reloadUrl(){
        overnight must not quietly become a different test an hour later. */
     ['night','nightmsg','focus','focusuntil','now',
      'gentle','gentleuntil','gentleeverymin','gentleholdsec',
-     'media','mediaeverymin','mediaholdsec'].forEach(function(k){
+     'media','mediaeverymin','mediaholdsec',
+     'calview','caleverymin','calholdsec'].forEach(function(k){
       const v=paramOf(k);
       if(v) q.push(k+'='+encodeURIComponent(v));
     });

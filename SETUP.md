@@ -125,6 +125,10 @@ the deliberate default.
 | media | *(blank — see §5)* |
 | mediaEveryMin | *(blank — see §5)* |
 | mediaHoldSec | *(blank — see §5)* |
+| calendarView | *(blank — see §3b)* |
+| calendarEveryMin | *(blank — see §3b)* |
+| calendarHoldSec | *(blank — see §3b)* |
+| calendarScreens | *(blank — see §3b)* |
 
 - **standing** — no longer shown (removed 2026-09-14 so the calendar could
   show more upcoming events). A leftover row does nothing and can be deleted.
@@ -158,6 +162,10 @@ the deliberate default.
 - **media**, **mediaEveryMin**, **mediaHoldSec** — the photo moments master
   switch and its timing. All optional; leaving them out means no photo moments
   at all, which is the default. **See §5, "Photo moments".**
+- **calendarView**, **calendarEveryMin**, **calendarHoldSec**,
+  **calendarScreens** — a screen showing only what is coming up on the
+  calendar, either all the time or now and then. All blank means off, which is
+  the default. **See §3b, "Just the calendar".**
 
 ---
 
@@ -276,6 +284,78 @@ gentle message keeps coming back when nobody is watching.
 | On screen | continuously | ~20s every ~15 min |
 | Use it when | the board is in the way | the board is still useful |
 | Example | "Stay inside. Greg is on his way." | "Greg is at the store, back around 4:00." |
+
+---
+
+## 3b. Just the calendar
+
+**Off unless you turn it on, and it should stay off until Greg has looked at
+it in the room.**
+
+This is a second way to show the `Events` tab: **only what is coming up**, up
+to forty entries, in three columns across the whole screen. Nothing from the
+past, no check marks. Today's own entries count as coming up and drop off by
+themselves at midnight. The date and the clock stay across the top, and the
+reassurance line stays across the bottom. The normal board's CALENDAR box is
+not changed by any of this.
+
+One cell decides how it appears:
+
+| Key | Value | What happens |
+|-----|-------|--------------|
+| calendarView | `takeover` | The calendar view **replaces the board** for as long as the cell says so. |
+| calendarView | `rotate` | The calendar view **comes round now and then**, stays for a little while, then the board comes back. Like the photo moments. |
+| calendarView | *(blank, or anything else)* | **Off.** The board looks exactly as it always has. |
+
+It has to be exactly one of those two words; capitals and extra spaces don't
+matter. **Anything else counts as off**, on purpose. `takeovr`, `on`, `yes`,
+`take over` all do nothing. A spelling mistake can never leave the board stuck
+on the calendar. (If a screen is showing the board when you expected the
+calendar, check the spelling first. `?debug=1` prints `CALVIEW off
+(unrecognised "…")` when that is the reason; see §7.)
+
+**`takeover`, in more detail:**
+
+- A **`focus` message still wins.** It shows instead, and the calendar comes
+  back when the message clears.
+- **The bedroom at night still goes dark** with its night message. The living
+  room and table show the calendar view at night, dimmed like the rest of the
+  board.
+- **If nothing is coming up, the normal board shows instead**, rather than an
+  empty screen. Add an event and the calendar view comes back by itself.
+- **The routine, the notes and the check-in buttons are not shown** while it
+  is on. If the check-ins matter on that screen, use `rotate` instead.
+
+**`rotate`, and its two optional dials** (both safe to leave blank):
+
+| Key | Default | What it does | Example |
+|-----|---------|--------------|---------|
+| calendarEveryMin | 20 | How often it comes round, in minutes. Minimum 2. | `30` |
+| calendarHoldSec | 30 | How long it stays up each time, in seconds. 5–60. | `45` |
+
+- It takes turns with photos and gentle messages. **Only one thing is ever on
+  screen at a time.** A gentle message or a photo goes first if both are due,
+  but the calendar is never skipped for long.
+- If there is nothing coming up, it doesn't come round at all.
+- The bedroom at night doesn't show it, and a `focus` message stops it.
+- Numbers outside the limits are pulled back inside them. `0` or `abc` means
+  the default.
+
+**Only some screens:** `calendarScreens` limits either one to the screens you
+name. Blank means every screen.
+
+| Key | Value |
+|-----|-------|
+| calendarScreens | `living-room` |
+
+Use the same names as in each screen's web address (`table`, `living-room`,
+`bedroom`), with a comma between them: `table, living-room`. Write
+`living-room` with the hyphen. `Living Room` with a space is read as two
+names, "living" and "room", and matches neither.
+
+**To turn it off:** clear the `calendarView` cell, or delete the row. The board
+goes back to normal within about three minutes, the next time it checks the
+Sheet.
 
 ---
 
@@ -807,6 +887,13 @@ allowed out of how many the Sheet lists, and what the last try did — including
 `FAILED to load <file>` if a photo couldn't be downloaded. The table and
 living room show photos day and night; the bedroom only in day mode, so from
 8pm to 6am it reads `[night]`.
+
+The `CALVIEW` line is for "why isn't the calendar view showing?": `off`,
+`off (unrecognised "…")` for a misspelling, `off (not this screen)` when
+`calendarScreens` leaves this screen out, `takeover SHOWING`, `takeover
+yielded: focus` / `night screen` / `nothing upcoming`, or for `rotate` the
+reason it is quiet (`[focus]`, `[night]`, `nothing upcoming`) and when it is
+next due. It ends with how many entries are coming up.
 
 It draws over the reassurance line, so prefer running it on the living-room or
 bedroom TV rather than her table display. Without the flag nothing is added to

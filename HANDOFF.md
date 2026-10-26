@@ -102,6 +102,9 @@ data a household depends on.
 | `&gentleuntil=4:00 pm` | …until this LA time (blank or unparseable = end of day) |
 | `&gentleeverymin=N` / `&gentleholdsec=N` | override its cadence / hold, still through the same clamps |
 | `&gentlenow=1` | show it ~50ms after boot. Cannot just call `attemptMoment()` — that hands a tie to the photo — so it skips the slot allocation only; the gate and the expiry check both still run |
+| `&calview=takeover` / `&calview=rotate` | force the calendar view setting. Goes through the same `calendarViewSetting()` as the Sheet, so `&calview=takeovr` is off here too |
+| `&caleverymin=N` / `&calholdsec=N` | override its cadence / hold, still through the same clamps |
+| `&calnow=1` | show a calendar moment ~50ms after boot. Skips the wait and the slot allocation only; the shared gate and the "anything upcoming" check still run. Not carried across the hourly reload |
 
 Set as a clock *skew*, not a frozen time, so a boundary crossing can be watched
 happening. They are carried across the hourly reload too (`photonow` is not —
@@ -115,7 +118,7 @@ on the next hourly reload).
 | `Days` | one row per date: `Date, Today, Notes, Reassurance` | TODAY'S ROUTINE, NOTES |
 | `Events` | one row per event: `Date, Description` | CALENDAR |
 | `Media` | one row per photo: `File, Caption, Screens` | occasional photo-moment overlays |
-| `Settings` | key/value: `standing`, `reassure`, `notes`, `alertAfterMinutes`, `focus`, `focusUntil`, `night`, `nightStart`, `nightEnd`, `media`, `mediaEveryMin`, `mediaHoldSec` | constants shown every day, plus the extra display modes |
+| `Settings` | key/value: `standing`, `reassure`, `notes`, `alertAfterMinutes`, `focus`, `focusUntil`, `night`, `nightStart`, `nightEnd`, `media`, `mediaEveryMin`, `mediaHoldSec`, `calendarView`, `calendarEveryMin`, `calendarHoldSec`, `calendarScreens` | constants shown every day, plus the extra display modes |
 | `Status` | written BY the board: `Device, Last seen, Ago, Status` | nothing — it is the heartbeat readout |
 
 Headers are matched by name, so column order is free. Multi-line cells
@@ -165,7 +168,7 @@ added later should extend an axis rather than add a fifth branch.
 | Axis | Values |
 |---|---|
 | **Palette** | `day` — the warm paper/ink board · `night` — near-black ground, warm low-luminance amber text |
-| **Layout** | `full` — header + grid + reassurance · `single-message` — header + one dominant centred message + reassurance |
+| **Layout** | `full` — header + grid + reassurance · `single-message` — header + one dominant centred message + reassurance · `calendar` — header + upcoming calendar entries + reassurance (added 2026-10-24, see *Calendar view*) |
 
 **The two axes are selected independently**, and that is the point of the
 design rather than an implementation detail. Palette is decided first — is this
@@ -179,6 +182,7 @@ one from the other.
 | **Night, full board** | night | full | table, living room, unknown | — same board, dimmed |
 | **Night, minimal** | night | single-message | bedroom | the night orientation text |
 | **Focus** | day *or* night | single-message | all | an ad-hoc takeover message |
+| **Calendar view** | day *or* night | calendar | all, or `calendarScreens` | upcoming entries only (`calendarView = takeover`) |
 
 **The dark full board is not a fourth mode somebody added.** It is what falls
 out of asking the two questions separately instead of together, and it was
@@ -200,10 +204,15 @@ one line would solve the wrong problem by removing the thing she is looking at.
    which layout is chosen below.
 1. A focus message is active → single-message with the focus text, in that
    palette. So one takeover shows warm at 2pm and dark at 3am, on any screen.
-2. Else if `night` → **this screen's configured night layout**: `single` (the
-   bedroom) with the night text, or `full` (the living areas) with the ordinary
-   board and no message at all.
-3. Else → the full day board, day palette.
+2. Else if `night` and this screen's night layout is `single` (the bedroom) →
+   single-message with the night text.
+3. Else if `calendarView` is `takeover` for this screen **and** something is
+   upcoming → the calendar layout, in whichever palette step 0 chose.
+4. Else → the full board: dimmed if `night` (the living areas, no message at
+   all), the day board otherwise.
+
+Step 3 was inserted 2026-10-24 between what used to be one "night" step; the
+order of everything that existed before is unchanged.
 
 Both switches are clock-driven and nothing else, so `tick()` recomputes the
 selection every second and repaints **only when the answer changes** — a
@@ -688,6 +697,227 @@ entries for `?demo=1`: a small placeholder SVG (`media/demo-placeholder.svg`
 same-origin fetch rather than a mock) and a filename that genuinely does not
 exist, so the failure/skip path is exercised for real too, not simulated.
 
+## Calendar view
+
+Added 2026-10-24. **Ships off** (`calendarView` absent = off) and stays off
+until Greg has seen it in the room through the Tapo camera.
+
+Upcoming entries only, on a screen of their own: no past, no ✓, no TODAY
+divider. Today's own entries count as upcoming. The day board's CALENDAR card
+is untouched — this is a second way to show the same `Events` list, read
+through the same `calendarSource()`. One Settings cell picks the route:
+
+| `calendarView` | What it is | Mechanism |
+|---|---|---|
+| `takeover` | the calendar view replaces the grid for as long as the cell says so | a third value on the **layout** axis, `calendar`, chosen in `selectMode()` |
+| `rotate` | the calendar view takes a turn every `calendarEveryMin`, holds `calendarHoldSec`, gives the board back | a third kind of **moment**, on the same scheduler |
+| anything else | off | — |
+
+**Opt-in like `media`, and stricter about it than it looks.** Only the exact
+words (case and surrounding spaces ignored) do anything. `takeovr`, `on`, `yes`,
+`take over`, `rotating` are all off — verified. A typo has to fail to off,
+never to takeover: an unintended takeover hides the routine, the notes and the
+check-ins all day on a screen nobody in the house can debug. `?debug=1` prints
+`CALVIEW off (unrecognised "takovr")` so the typo is visible from the camera.
+
+`calendarScreens` (optional) narrows either route to named screens, split and
+normalised exactly like `Media.Screens` — `index.html` now has its own
+`normScreenToken()`, character-for-character the server's, and `SCREEN` uses
+it. Blank = every screen.
+
+**No `apps-script.gs` change.** `readSettings()` already passes every key
+through (`norm()`ed: `calendarView` → `calendarview`), so this needs no
+redeploy — the cells work as soon as `index.html` is pushed.
+
+### Layout — 3 columns, chosen by measurement
+
+The instinct was 3 columns, then 2. Measured headless, with realistic entries
+(time-prefixed, bare, several same-day pairs, a few long enough to wrap), the
+resolved `--fs` of the calendar-view card:
+
+First pass, row spacing and date slot copied from the day card (0.40 / 6.0):
+
+| viewport | 30 entries, 2 col | 30, 3 col | 35, 2 col | 35, 3 col | 40, 2 col | 40, 3 col |
+|---|---|---|---|---|---|---|
+| 1280×650 | 16 | 19 | 14 | 18 | 14 (**35 of 40**) | 16 |
+| 1280×720 | 17 | 20 | 15 | 19 | 14 (39 of 40) | 17 |
+| 1280×510 | 14 (**28 of 30**) | 17 | 14 (28) | 14 | 14 (28) | 14 (38) |
+
+Shipped, row spacing 0.25 and date slot 5.5:
+
+| viewport | 30, 2 col | **30, 3 col** | 35, 2 col | **35, 3 col** | 40, 2 col | **40, 3 col** |
+|---|---|---|---|---|---|---|
+| 1280×650 | 17 | **20** | 15 | **19** | 14 (39 of 40) | **18** |
+| 1280×720 | 18 | **21** | 16 | **20** | 15 | **18** |
+| 1280×510 | 14 | **18** | 14 (**30 of 35**) | **16** | 14 (30 of 40) | **14** |
+
+Three columns wins at every viewport and count, by 3–4px, and is the only one
+that holds 40 at 510. **Two columns is height-bound**: rendered, every column
+is half empty to the right, because a realistic entry is far shorter than half
+the card. Three columns spends that width; 6–9 of 30 descriptions wrap to a
+second line, and that costs less than the extra rows two columns need. So the
+answer to "does 30 entries force it below the board's ~17px" is: **in two
+columns, yes (16px at 1280×650 as first built); in three, no (20px).**
+
+Other measured choices:
+
+- **Row spacing 0.25 / date slot 5.5** (day card: 0.40 / 6.0). Worth 1–2px
+  together. 5.5 is the widest label there is — "Mon, May 10", measured at
+  5.29× the type size over a full year of labels — plus a little.
+- **No week breaks.** A 0.55-line gap before each new week cost 0–1px, and
+  rendered it read as uneven spacing rather than as grouping. Not built.
+- **Caption kept** ("COMING UP"): dropping it bought 0–1px. It is the one thing
+  that tells her this is a different screen from the board.
+- **Ceiling 30, floor 14, cap 40** (`CALVIEW_MAX/MIN/CAP`). Beyond the cap
+  entries are logged to the console the way `calendarWindow()` logs, never
+  dropped silently. 40 fits at 18px at 1280×650 and exactly at the floor at
+  1280×510.
+
+**Fill order and the column break.** CSS `column-count:3`, the same mechanism
+as `.today-list.two`: fills down the first column, then the next. Same-day
+entries print the date once; **a same-day pair split by a column break gets
+its date reprinted at the top of the next column** — found by position after
+layout (`offsetLeft` changes), since only the browser knows where the break
+fell. Reprinting into the fixed-width date slot cannot change a row's height,
+so it cannot move the break it responds to. Verified at eight viewports × 30 /
+35 / 40 entries: every column top carries a date, and no mid-column repeat does.
+
+### Does `fitBlock()` see overflow in a multi-column box? — PROVED
+
+Only if the list's height is free. Measured with 120 entries at the floor:
+
+- **As shipped** the list is not height-constrained (`.body > *` is
+  `flex:0 0 auto`), so the columns balance and overflow appears as
+  `scrollHeight` 789 vs `clientHeight` 391. Caught.
+- **Sabotaged** — the list given a fixed height — the overflow goes
+  **sideways**: `scrollHeight` 391 = `clientHeight` 391 (blind),
+  `scrollWidth` 2751 vs 1166. Plain `fitBlock()` then reports a clipped 30-entry
+  list as fitting at 40px.
+
+So `fitBlock()` gained an optional fourth argument, `wide`, which adds the
+`scrollWidth` test. With it, the sabotaged case shrinks to 26px and nothing
+clips. It is passed only for the calendar-view cards; every existing card is
+measured exactly as before (verified, below).
+
+**Abusive text.** One pasted-in paragraph taller than a whole column can never
+be placed while entries must stay in one piece (`break-inside:avoid`), and the
+first version's fallback — drop entries from the end until it fits — cut a
+30-entry list to **6** at 1280×510 to get rid of it. Now the fallback order is:
+shrink to the floor → let entries split across the column break → only then
+drop the furthest-future entries, logged. Same test now: 30 of 30 at 650
+(15px), 28 of 30 at 510.
+
+### Takeover
+
+- Order: **focus > bedroom night-single > calendar takeover > full board.** It
+  never hides a focus message and never lights the bedroom's dark screen. On the
+  living-area screens at night it shows in the night palette.
+- **Header and reassurance line kept**, including the `· Updated 3:56 PM`
+  staleness note (verified on the takeover).
+- **Nothing upcoming → the full board, not an empty screen.** An empty "COMING
+  UP" card all day says nothing and hides everything the board does say. Because
+  `selectMode()` is re-asked every second, the takeover comes back on its own
+  the moment an entry exists (verified, without a paint call).
+- **Check-ins are not on it** — see the trade-off below.
+- Photos and gentle messages still rotate over the takeover exactly as over the
+  board. It is a replacement for the board, not a focus message, so
+  `momentBlockedBy()` was not widened. Revisit if that reads badly in the room.
+
+### Rotating — the third moment kind
+
+Same `momentState`, same overlay, same `momentBlockedBy()` gate, same
+`MOMENT_HARD_CAP_MS` backstop, never its own timer.
+
+- `calendarEveryMin` default 20, floor 2; `calendarHoldSec` default 30
+  (a list takes longer to read than a sentence), floor 5, ceiling 60.
+  `MOMENT_EVERY_MIN_FLOOR` is now the min of three floors (still 2).
+- Due-time `calendarDueAt` on `Date.now()`, set through the same `dueIn()`.
+- **"Could this actually run"**: rotate set for this screen, gate clear, *and*
+  something upcoming. Nothing upcoming does not take the slot and does not
+  tighten the scheduler (`momentEveryMin()` only counts it while it could run).
+- **Priority: photo > gentle > calendar, with a starvation guard.** Ties between
+  photo and gentle are untouched. But a gentle cadence at or below the
+  calendar's makes gentle due at *every* tick (its due-time is set short of a
+  full cadence), and lowest priority would then mean never. So the calendar
+  counts the slots it was ready for and lost (`calPassedOver`); after
+  `CAL_STARVE_SLOTS` (2) it goes first, once. Trace below.
+- **Content is rendered live**, never snapshotted: started from current
+  `events` and `deviceNow()`, and re-rendered on every `paint()` while up (each
+  fetch, each minute, midnight).
+- **Interrupts** (every second): the shared gate, the cell switched off, or
+  nothing left upcoming — e.g. midnight taking the last of today's entries.
+
+**The header problem.** `#moment` is `inset:0`. For this kind only,
+`setMomentArea(true)` gives the overlay the **grid's own box** (measured, not a
+CSS calc, because the reassurance line's height is not fixed — it gains the
+staleness note), so the header and the reassurance line stay on screen and
+live. Still one overlay and one state; `endMoment()` always puts it back to
+`inset:0`, and a photo after a calendar moment was verified full-stage again.
+**This makes the gentle open question cheap**: giving a gentle message the
+header is one `setMomentArea(true)` call in `beginGentleMoment()` plus a look
+at how `GENTLE_MSG_MAX` sits in the shorter box. Not done — gentle and photo
+behaviour are unchanged.
+
+### Interleaving trace
+
+Slot by slot over compressed virtual time (`Date.now` offset, scheduler
+stepped), demo mode, minutes since boot, p/g/c = photo/gentle/calendar:
+
+```
+photo 20 / gentle 5 / calendar 10:
+ 5.5 p  10.1 g  15.6 c  20 g  24.4 p  29.5 g  34.3 c  39 g  43.5 p  48.3 g  52.9 c
+ 58.1 g  63.5 p  69.1 g  74.5 c  79.9 p  84.6 g  89.4 g  94.6 c  99.6 p ...
+ (30 slots: photo 8, gentle 15, calendar 7, idle 0)
+
+gentle 2 / calendar 2 — the case that would starve it without the guard:
+ 2 g  4 g  6 c  8.3 g  10.3 g  12.3 c  14.5 g  16.7 g  18.7 c ...   (g 16, c 8)
+
+calendar only, every 10:  8.6  19  28.1  38.8  49.3  57.9  66.9  75.5
+calendar off, photo 20:   photo at every slot, ~20 min apart, exactly as before
+photo 20 / gentle 5, calendar off: photo 7, gentle 17 — unchanged
+```
+
+Read the first trace honestly: the calendar is never starved, but **at a
+cadence slower than gentle's it lands about every 2× its own cadence** (asked
+for 10, got ~19–21), because gentle takes the first two slots it is due for.
+That is "lowest priority, not starvable" working as designed. If the calendar
+should keep its own cadence more tightly, `CAL_STARVE_SLOTS = 1` gives an
+alternating pattern at the cost of gentle's.
+
+### Night contrast
+
+Measured on the calendar-view card:
+
+| role | day | night (living areas) |
+|---|---|---|
+| date column (`--note-ink`) | 9.08:1 | **5.44:1** |
+| description (`--ink`) | 15.97:1 | 6.09:1 |
+| "COMING UP" caption (`--muted`) | 4.68:1 | **2.85:1** |
+| column rule (`--line`, decorative) | — | 1.15:1 |
+
+The date column is **not** the 2.85:1 problem the day card has: upcoming dates
+there and here use `--note-ink`, not `--muted`. Only the caption sits at 2.85.
+
+### The check-in trade-off — MEASURED, not built
+
+A full-day takeover hides the chips. Measured the cost of carrying the strip
+onto the takeover, full width under the calendar card (calendar `--fs`,
+entries shown, chip label size):
+
+| | 1280×650: 30 / 35 / 40 entries | 1280×510: 30 / 35 / 40 |
+|---|---|---|
+| no strip (shipped) | 20 / 19 / 18 | 18 / 16 / 14 |
+| 1 row of 8 (59px strip) | 18 / 16 / 15, labels **12px** | 15 / 14 (30 of 35) / 14 (30 of 40), labels 11px |
+| 2 rows of 4 (112px strip) | 16 / 14 (**34 of 35**) / 14 (34 of 40), labels 14px | 14 (**27 of 30**), labels 11px |
+
+Two rows of four cannot keep 30 entries at 510 or 35 at 650. One row of eight
+fits, at 2–4px of calendar type and with chip labels at 12px — smaller than the
+14px they already are on the board, on the element that has become one of its
+most valuable. **Recommendation: if the check-ins matter on a given screen, use
+`rotate` there, not `takeover`** — the board (and the chips) are back between
+turns. If a takeover is wanted all day *and* the chips with it, the one-row
+strip is the only shape that measured as viable; it is not built.
+
 ## Check-ins
 
 Added 2026-09-15. Four buttons on her iPhone — morning medicine, evening
@@ -1022,13 +1252,26 @@ asking.
   `idle`. This is what makes "a photo and a gentle message could collide"
   unrepresentable rather than merely unlikely. If a third kind of moment is ever
   added, add it to the same scheduler — never give it its own timer.
+  **There are now three** (2026-10-24): photo, gentle, and the calendar view,
+  which was added on exactly these terms — same state, same overlay, same gate,
+  same hard cap, its own due-time on `Date.now()`. Its one structural
+  difference is the overlay's rectangle (the grid's box, via `setMomentArea()`),
+  and `endMoment()` always resets that to `inset:0`. A fourth kind should copy
+  it, including the starvation guard if it is lower priority than the rest.
 - **A wrong-in-the-safe-direction overlay always has an independent hard
   backstop.** A focus takeover's until-instant, a moment's
   `MOMENT_HARD_CAP_MS` — both guarantee the board returns to its baseline by a
   mechanism that does not depend on the "normal" path working correctly. When
   adding anything else that temporarily covers the board, give it the same
   property and prove it the same way: deliberately break the normal teardown
-  and confirm the backstop still recovers on its own.
+  and confirm the backstop still recovers on its own. (Done for the calendar
+  moment: hold timer cleared mid-moment, still showing 15s past a 5s hold, torn
+  down by the hard cap at 90s.) The calendar **takeover** needs no backstop of
+  its own: it is not temporary, it is a layout chosen by a Sheet cell, and it is
+  re-asked every second like every other layout.
+- **The calendar view reads only dates.** Upcoming = `date >= today`, compared
+  on every render. It never claims anything happened — nothing on it is past —
+  so it does not touch "nothing is inferred from time passing".
 
 ## The safety model
 
@@ -1178,6 +1421,47 @@ compressed virtual time, plus four rendered states):
   same token rule the heartbeat's device id uses; a bare `https://` URL in
   `File` passes through verbatim.
 
+**Verified for the calendar view** (2026-10-24; 302 measured checks in
+headless Chrome over CDP, endpoint blocked at the network layer throughout):
+- **Feature off is byte-identical.** Against the previous `index.html` served
+  side by side with the same cached data: `--fs`, row counts and clip state of
+  all three cards, the chips, the header size, the reassurance text, letterbox
+  and the grid's whole `outerHTML`, at 1280×650 / 720 / 510, 800×600,
+  1920×1080; three datasets × three URL shapes (plain, `?checkins=1`,
+  `?screen=table`) × three settings (absent, `takovr`, `rotate`) — 135 checks —
+  plus 25 more in demo (night, night + check-ins, `&now=`, bedroom night,
+  focus) with the demo calendar put back to its old rows. All identical.
+- **Takeover**: no clip, no scroll, no letterbox at all five viewports, day and
+  night palettes, 30 and 40 entries, 80 entries (cap logs `40 … not shown`), and
+  one abusive ~600-character description with a 200-character word. 800×600 is
+  letterboxed 19px top and bottom — **identically on the old board**; that is
+  the existing `MAX_H` clamp on a 4:3 screen, not this feature.
+- **Yields**: to focus (day and night), to the bedroom's night screen; shows on
+  bedroom day, table / living-room / unnamed at night. A focus landing
+  mid-takeover takes over and its expiry returns the calendar view on the clock.
+  Nothing upcoming → full board, and back on its own when an entry appears.
+  `calendarScreens` included/excluded correctly for five lists.
+- **Rotation**: full cycle, overlay exactly the grid's box, header and
+  reassurance visible throughout, torn down clean, every card's `--fs` and row
+  count unchanged afterwards; a photo after it is full-stage again.
+  Interrupted mid-hold by focus (faded within 1s); the bedroom's moment pulled
+  at the 8pm boundary and the slot refused at night; living room at night shows
+  it on the night palette. **Hard cap with the hold timer sabotaged** recovers.
+  `&calnow=1` still refused by focus; nothing upcoming → no slot, no cadence change.
+- **Dates**: midnight on the ticking clock (`&now=…T23:59`) removed today's two
+  entries from the takeover, and from a rotating moment mid-hold, with no
+  fetch; midnight taking the last entry pulled the moment. **Offline** (endpoint
+  blocked, cache only) the takeover rendered all 30 cached entries; the
+  staleness note appeared on its reassurance line.
+- Interleaving traces, the multi-column overflow proof, settings/clamp tables,
+  hook gating (`&calview=` inert without `demo=1`), the hourly reload carrying
+  `calview` / `caleverymin` / `calholdsec` but not `calnow`, and eight
+  `?debug=1` `CALVIEW` states. `node test-log-kinds.js`: 15/15 (endpoint not
+  touched).
+- **Not verified**: anything on the Fire TV. Silk's multi-column support and
+  `offsetLeft` inside columns (the date reprint depends on it) are assumed from
+  `.today-list.two` working there, not tested.
+
 **Verified on the actual Fire TV:**
 - The board renders correctly in Silk and fills the screen.
 - **Midnight rollover against the live Sheet** — the date line advanced, the
@@ -1280,7 +1564,25 @@ compressed virtual time, plus four rendered states):
   time, which is exactly the comparison she cannot make from memory. It needs
   the overlay to start below the header rather than at `inset:0`, so it is a
   real change, not a tweak — worth doing only if the full-bleed version reads
-  as too much of an interruption in the room.
+  as too much of an interruption in the room. **Now cheap** (2026-10-24): the
+  calendar moment built `setMomentArea()`, so it is one call in
+  `beginGentleMoment()` plus a look at the message in the shorter box.
+- **The calendar view, in the room.** Every number in *Calendar view* is a
+  headless measurement. Whether 18–20px across three columns reads from her
+  chair, whether a full-day takeover is calming or disorienting, whether a
+  rotating list every 20 minutes is welcome or noise, and the 30s hold — all
+  untested. It ships off for exactly this reason.
+- **Calendar view and check-ins.** The takeover hides the chips. Measured and
+  recommended against carrying them (see *The check-in trade-off*); `rotate`
+  is the route that keeps them.
+- **Photo vs gentle at equal cadences (pre-existing, not changed).** Found
+  while tracing the calendar: photo wins a tie and both due-times are set short
+  of a full cadence, so with `mediaEveryMin` equal to `gentleEveryMin` the photo
+  is due at every tick and **gentle never shows** — traced: photo 5 / gentle 5
+  gave photo 12, gentle 0 over an hour. The defaults (80 / 15) never
+  hit it. The calendar's starvation guard (`CAL_STARVE_SLOTS`) is the fix shape
+  if it ever matters; left alone here because the brief was not to change
+  photo or gentle behaviour.
 - **The three gentle numbers** — 15 min, 20 s, 96px — are starting points
   chosen the same way `MSG_MAX_NIGHT` was, and want the same treatment: look at
   them in the room, on the panel, with a real message. Headless proved the
