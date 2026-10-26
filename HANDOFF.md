@@ -576,8 +576,9 @@ Four invariants, each with a specific failure it structurally prevents:
 
 ### Scheduling and selection
 
-**Two due-clocks, one timer.** The scheduler wakes at `momentEveryMin()` — the
-faster of the two cadences while a gentle message is live, the photo cadence
+**Due-clocks per kind, one timer.** The scheduler wakes at `momentEveryMin()` —
+the fastest cadence among the kinds that could currently run (photo always; a
+live gentle message; the calendar view when rotating), the photo cadence
 otherwise — so a live message *tightens the whole rotation* rather than adding
 a second timer beside it. Each kind carries its own `*DueAt` stamp; a slot goes
 to whatever is due, and **a photo wins a tie** (it is the rarer event and there
@@ -592,6 +593,56 @@ A slot is allocated on "could this actually run", not merely "is it due" —
 otherwise a permanently-due-but-impossible photo (media off, empty pool, no
 eligible rows for this screen) would quietly eat every slot the message should
 have had.
+
+**No kind can be starved** (2026-10-24, `MOMENT_STARVE_SLOTS = 2`). The
+sentence above — "its own due-time stays passed so it takes the very next slot"
+— was only true while the photo was *not* due at that next slot too. It is the
+due-slack that breaks it: a kind whose cadence is at or below the scheduler's
+tick is due at **every** tick, so two such kinds side by side made strict
+priority hand every slot to the higher one forever. **This was a live bug:**
+`mediaEveryMin` = `gentleEveryMin` meant the gentle message never appeared at
+all — traced, photo 5 / gentle 5 gave photo 12, gentle 0 over an hour, and
+2 / 2 gave 30 / 0. Equal numbers are a natural thing to type into a Sheet. The
+defaults (80 / 15) never hit it.
+
+The fix is one mechanism for every kind, in `attemptMoment()`: the ready kinds
+are listed in the default order (photo, gentle, calendar — **photo still wins a
+tie**), each kind has a counter `momentPassedOver[kind]` of slots it was ready
+for and lost, and a kind at `MOMENT_STARVE_SLOTS` or more goes first, once
+(ties between starved kinds go to the default order). The winner's counter
+resets; every other ready kind's counter goes up. The displaced kind's due-time
+is untouched, so it takes the next slot. `?debug=1` prints `passed over N` on
+the GENTLE and CALVIEW lines when it is non-zero.
+
+2, not 1: at 1, two always-due kinds strictly alternate and the default order
+stops meaning anything; at 2 the higher kind keeps two slots in three. Where no
+kind is ever passed over twice running, the guard never fires and the order is
+exactly the old plain priority — **proved, not argued**. Deterministic traces
+(seeded `Math.random` from before boot, the boot-armed timer, exact scheduler
+delays), the previous code against this one:
+
+| scenario | before | after | identical? |
+|---|---|---|---|
+| photo only, every 20 | 8 photos: 19.2 36.8 57.8 80.3 98 116.8 133.9 153.7 | same | **yes** |
+| photo only, default 80 | 76.6 147.2 231.4 321.4 | same | **yes** |
+| photo 20 / gentle 5 (the trace above) | p 7, g 17 | same | **yes**, slot for slot |
+| photo 5 / gentle 5 | p 12, **g 0** | p 8, g 4 — `p p g` repeating | fixed |
+| photo 2 / gentle 2 | p 30, **g 0** | p 20, g 10 — `p p g` repeating | fixed |
+
+The photo-only path is unchanged: first photo one cadence after boot (19.2 min
+at 20 with ±15% jitter; 76.6 at the default 80), then at the plain cadence.
+`MOMENT_DUE_SLACK` and the tie rule are untouched.
+
+Re-traced with the same harness, photo 20 / gentle 5:
+
+```
+4.8p 9.2g 14.5g 20.1g 24.5p 29.2g 33.5g 38.4g 43.3p 48.4g 53.4g 58.1g 63.7p
+68.5g 72.9g 77.5g 82.1p 87.7g 92.2g 97.5g 103.1p 108.5g 114g 119.6p
+```
+
+A photo every fourth slot (~20 minutes apart), the message in the other
+three, and the guard never fires: the same pattern the 2026-09-15 trace recorded (its exact minutes differ because that one
+was not seeded).
 
 > **Due-times live on `Date.now()`, never `deviceNow()`.** A due-time is a
 > stopwatch — how long since the last one of these — so it belongs on the same
@@ -835,12 +886,12 @@ Same `momentState`, same overlay, same `momentBlockedBy()` gate, same
 - **"Could this actually run"**: rotate set for this screen, gate clear, *and*
   something upcoming. Nothing upcoming does not take the slot and does not
   tighten the scheduler (`momentEveryMin()` only counts it while it could run).
-- **Priority: photo > gentle > calendar, with a starvation guard.** Ties between
-  photo and gentle are untouched. But a gentle cadence at or below the
-  calendar's makes gentle due at *every* tick (its due-time is set short of a
-  full cadence), and lowest priority would then mean never. So the calendar
-  counts the slots it was ready for and lost (`calPassedOver`); after
-  `CAL_STARVE_SLOTS` (2) it goes first, once. Trace below.
+- **Priority: photo > gentle > calendar, under the shared starvation guard.**
+  Lowest priority alone would mean "never" whenever gentle's cadence is at or
+  below the calendar's. The guard (`MOMENT_STARVE_SLOTS`, see *Scheduling and
+  selection*) began life here as a calendar-only rule and was then generalised
+  to every kind, because the same bug already existed between photo and gentle.
+  Trace below.
 - **Content is rendered live**, never snapshotted: started from current
   `events` and `deviceNow()`, and re-rendered on every `paint()` while up (each
   fetch, each minute, midnight).
@@ -860,29 +911,29 @@ behaviour are unchanged.
 
 ### Interleaving trace
 
-Slot by slot over compressed virtual time (`Date.now` offset, scheduler
-stepped), demo mode, minutes since boot, p/g/c = photo/gentle/calendar:
+Deterministic: `Math.random` seeded before boot, the boot-armed timer used
+as-is, `Date.now` jumped slot to slot, timestamps summed from the scheduler's
+own delays. Demo mode, minutes since boot, p/g/c = photo/gentle/calendar. The
+full photo/gentle traces are under *Scheduling and selection*.
 
 ```
-photo 20 / gentle 5 / calendar 10:
- 5.5 p  10.1 g  15.6 c  20 g  24.4 p  29.5 g  34.3 c  39 g  43.5 p  48.3 g  52.9 c
- 58.1 g  63.5 p  69.1 g  74.5 c  79.9 p  84.6 g  89.4 g  94.6 c  99.6 p ...
- (30 slots: photo 8, gentle 15, calendar 7, idle 0)
+photo 20 / gentle 5 / calendar 10   (30 slots: p 8, g 15, c 7, idle 0)
+ 4.8p 9.2g 14.5c 20.1g 24.5p 29.2g 33.5c 38.4g 43.3p 48.4g 53.4c 58.1g 63.7p ...
 
-gentle 2 / calendar 2 — the case that would starve it without the guard:
- 2 g  4 g  6 c  8.3 g  10.3 g  12.3 c  14.5 g  16.7 g  18.7 c ...   (g 16, c 8)
+gentle 2 / calendar 2               (24 slots: g 16, c 8)
+ 2g 4g 6.1c 8.4g 10.4g 12.4c 14.4g 16.4g 18.4c ...
 
-calendar only, every 10:  8.6  19  28.1  38.8  49.3  57.9  66.9  75.5
-calendar off, photo 20:   photo at every slot, ~20 min apart, exactly as before
-photo 20 / gentle 5, calendar off: photo 7, gentle 17 — unchanged
+photo 5 / gentle 5 / calendar 5     (24 slots: p 9, g 8, c 7)
+ 4.8p 9.2p 14.5g 20.1c 24.5p 29.2g 33.5c 38.4p 43.3g 48.4c ...
+ — before the guard was shared: p 16, g 0, c 8. Gentle was starved by the
+   photo; only the calendar had a guard.
 ```
 
 Read the first trace honestly: the calendar is never starved, but **at a
 cadence slower than gentle's it lands about every 2× its own cadence** (asked
-for 10, got ~19–21), because gentle takes the first two slots it is due for.
-That is "lowest priority, not starvable" working as designed. If the calendar
-should keep its own cadence more tightly, `CAL_STARVE_SLOTS = 1` gives an
-alternating pattern at the cost of gentle's.
+for 10, got ~19), because gentle takes the first two slots it is due for.
+That is "lowest priority, not starvable" working as designed.
+`MOMENT_STARVE_SLOTS = 1` would tighten it, at the cost of every priority.
 
 ### Night contrast
 
@@ -1257,7 +1308,8 @@ asking.
   same hard cap, its own due-time on `Date.now()`. Its one structural
   difference is the overlay's rectangle (the grid's box, via `setMomentArea()`),
   and `endMoment()` always resets that to `inset:0`. A fourth kind should copy
-  it, including the starvation guard if it is lower priority than the rest.
+  it. It gets the starvation guard for free by being pushed onto `ready` in
+  `attemptMoment()` with a `momentPassedOver` entry — do not give it its own.
 - **A wrong-in-the-safe-direction overlay always has an independent hard
   backstop.** A focus takeover's until-instant, a moment's
   `MOMENT_HARD_CAP_MS` — both guarantee the board returns to its baseline by a
@@ -1575,14 +1627,6 @@ headless Chrome over CDP, endpoint blocked at the network layer throughout):
 - **Calendar view and check-ins.** The takeover hides the chips. Measured and
   recommended against carrying them (see *The check-in trade-off*); `rotate`
   is the route that keeps them.
-- **Photo vs gentle at equal cadences (pre-existing, not changed).** Found
-  while tracing the calendar: photo wins a tie and both due-times are set short
-  of a full cadence, so with `mediaEveryMin` equal to `gentleEveryMin` the photo
-  is due at every tick and **gentle never shows** — traced: photo 5 / gentle 5
-  gave photo 12, gentle 0 over an hour. The defaults (80 / 15) never
-  hit it. The calendar's starvation guard (`CAL_STARVE_SLOTS`) is the fix shape
-  if it ever matters; left alone here because the brief was not to change
-  photo or gentle behaviour.
 - **The three gentle numbers** — 15 min, 20 s, 96px — are starting points
   chosen the same way `MSG_MAX_NIGHT` was, and want the same treatment: look at
   them in the room, on the panel, with a real message. Headless proved the

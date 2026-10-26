@@ -968,14 +968,6 @@ function clampCalHoldSec(v){
   const base=(isFinite(n)&&n>0)?n:CAL_HOLD_SEC_DEFAULT;
   return Math.min(CAL_HOLD_SEC_CEILING,Math.max(CAL_HOLD_SEC_FLOOR,base));
 }
-/* Lowest priority of the three moments, but not starvable. Photos and gentle
-   messages keep their order between themselves exactly as before; the
-   calendar only takes a slot when neither of them wants it — UNLESS it has
-   already been passed over this many times while ready, in which case it goes
-   first. Without this, any gentle cadence at or below the calendar's would
-   take every single slot (its own due-time is set short of a full cadence, so
-   it is due at every tick) and the calendar would never appear at all. */
-const CAL_STARVE_SLOTS = 2;
 /* The shared scheduler ticks at whichever cadence is currently fastest, so its
    floor has to be whichever floor is lowest — derived, never another number to
    keep in step by hand. (Moved below the calendar block so all three floors
@@ -1847,9 +1839,11 @@ let momentKind='';            /* in the overlay: '' | photo | gentle | calendar 
    very first slot, which is what makes the no-gentle-message case behave
    exactly as it did before any of this existed. */
 let photoDueAt=0, gentleDueAt=0;
-/* The calendar view's due-time, on the same raw clock, plus how many slots in
-   a row it has been ready for and lost — see CAL_STARVE_SLOTS. */
-let calendarDueAt=0, calPassedOver=0;
+/* The calendar view's due-time, on the same raw clock. */
+let calendarDueAt=0;
+/* How many slots in a row each kind has been READY for and lost to another
+   kind — see MOMENT_STARVE_SLOTS. Reset to 0 when that kind gets a slot. */
+let momentPassedOver={ photo:0, gentle:0, calendar:0 };
 let calViewHidden=0;          /* upcoming entries the last fit left out, for ?debug=1 */
 let photoLoadToken=0;         /* invalidates a preload that resolves too late */
 let momentTimer=null;          /* the scheduling timer (self-rescheduling)     */
@@ -2351,6 +2345,28 @@ const MOMENT_DUE_SLACK = 0.8;
    TRUE (dates, until-instants); the raw clock is for deciding what is NEXT. */
 function dueIn(everyMin){ return Date.now()+Math.round(everyMin*60000*MOMENT_DUE_SLACK); }
 
+/* NO KIND OF MOMENT CAN BE STARVED. The default order is fixed — photo, then
+   gentle, then calendar, so a photo still wins a tie — but a kind that has
+   been ready and lost this many slots in a row goes FIRST, once.
+
+   Why it is needed, and it was a real bug before it was a rule: MOMENT_DUE_SLACK
+   sets every due-time short of a full cadence, so a kind whose cadence is at
+   or below the scheduler's tick is due at EVERY tick. Put two such kinds side
+   by side and strict priority hands every slot to the higher one forever.
+   Measured before this existed: photo and gentle both at 5 minutes, an hour
+   of slots, photo 12, gentle 0 — a gentle message somebody had typed simply
+   never appeared. Equal cadences are a natural thing to type into a Sheet.
+
+   One mechanism for every kind, not a special case per kind: a counter per
+   kind, the same threshold, the same rule. Where no kind is ever passed over
+   twice running (photo alone; photo 20 / gentle 5) it never fires, and the
+   order is exactly the plain priority it always was. 2, not 1: at 1 two
+   always-due kinds would strictly alternate, which would be the priority
+   order ceasing to mean anything; at 2 the higher kind still gets two slots
+   in three. The displaced kind's due-time is not touched, so it takes the
+   very next slot. */
+const MOMENT_STARVE_SLOTS = 2;
+
 function attemptMoment(){
   scheduleNextMomentAttempt();      /* always line up the NEXT opportunity first, */
   if(momentState!=='idle') return;  /* whatever this attempt itself does — one moment at a time */
@@ -2374,33 +2390,41 @@ function attemptMoment(){
      empty calendar is not a moment and must not take the slot. */
   const calLive=!momentBlocked&&calendarRotateLive(todayISO);
   const calReady=calLive&&(t>=calendarDueAt);
-  /* Starved: it has been ready and lost CAL_STARVE_SLOTS slots running, so
-     it goes first this once. The others' due-times are left alone, so
-     whichever it displaced takes the very next slot. */
-  if(calReady&&calPassedOver>=CAL_STARVE_SLOTS){
-    beginCalendarSlot('starved');
-    return;
-  }
-  /* Whatever happens below, a ready calendar that does not get the slot has
-     been passed over once more. */
-  if(calReady&&(photoReady||gentleReady)) calPassedOver++;
 
-  /* A photo wins a tie, deliberately. It is the rarer event and there are only
-     a handful of them; the gentle message comes back round within minutes by
-     construction, so yielding a slot costs it almost nothing and starves it of
-     nothing — its own due-time stays passed, so it takes the very next slot. */
-  if(photoReady){
+  /* The ready kinds, in the default order. A photo wins a tie, deliberately:
+     it is the rarer event and there are only a handful of them; the others
+     come back round within minutes by construction, so yielding a slot costs
+     them almost nothing — their due-times stay passed and they take the next
+     slot. The calendar is last: only a slot nobody else wanted. Each start()
+     returns false if it turns out it cannot run after all (a photo pool that
+     emptied), and the slot falls through to the next, as it always has. */
+  const ready=[];
+  if(photoReady) ready.push({ kind:'photo', start:function(){
     photoDueAt=dueIn(clampMediaEveryMin(settings.mediaeverymin));
     const photo=pickNextPhoto();
-    if(photo){ noteMoment('loading '+photo.file); beginPhotoMoment(photo); return; }
-  }
-  if(gentleReady){
+    if(!photo) return false;
+    noteMoment('loading '+photo.file); beginPhotoMoment(photo); return true; }});
+  if(gentleReady) ready.push({ kind:'gentle', start:function(){
     gentleDueAt=dueIn(clampGentleEveryMin(settings.gentleeverymin));
-    beginGentleMoment(gentleText);
-    return;
-  }
-  /* Lowest priority: only a slot nobody else wanted. */
-  if(calReady){ beginCalendarSlot('free'); return; }
+    beginGentleMoment(gentleText); return true; }});
+  if(calReady) ready.push({ kind:'calendar', start:function(c){
+    beginCalendarSlot(c.starved?'starved':'slot'); return true; }});
+
+  /* MOMENT_STARVE_SLOTS: the most-passed-over kind at or past the threshold
+     moves to the front, once. Ties go to the default order. */
+  let starved=null;
+  ready.forEach(function(c){
+    const n=momentPassedOver[c.kind]||0;
+    if(n>=MOMENT_STARVE_SLOTS&&(!starved||n>momentPassedOver[starved.kind])) starved=c;
+  });
+  const order=starved?[starved].concat(ready.filter(function(c){ return c!==starved; })):ready;
+  if(starved) starved.starved=true;
+  let won=null;
+  for(let i=0;i<order.length&&!won;i++){ if(order[i].start(order[i])) won=order[i]; }
+  ready.forEach(function(c){
+    momentPassedOver[c.kind]=(c===won)?0:(momentPassedOver[c.kind]||0)+1;
+  });
+  if(won) return;
   /* Silent, and a normal, frequent outcome. Named for ?debug=1 only — the
      board looks identical whichever of these it was. The gate that stops
      EVERYTHING is the headline when it applies; otherwise both sides report,
@@ -2414,7 +2438,6 @@ function attemptMoment(){
 }
 function beginCalendarSlot(why){
   calendarDueAt=dueIn(clampCalEveryMin(settings.calendareverymin));
-  calPassedOver=0;
   beginCalendarMoment(why);
 }
 
@@ -2935,7 +2958,8 @@ function debugPaint(){
     '\nGENTLE '+(gLive?(gBlocked?'live ['+gBlocked+']':'live'):'expired')+
     (gentleUntilMs?'   till '+fmtTime.format(new Date(gentleUntilMs)):'')+
     '   every '+clampGentleEveryMin(settings.gentleeverymin)+'m'+
-    '   due '+((gLive&&!gBlocked)?shortIn(gentleDueAt):'-');
+    '   due '+((gLive&&!gBlocked)?shortIn(gentleDueAt):'-')+
+    (momentPassedOver.gentle?'   passed over '+momentPassedOver.gentle:'');
   /* The check-in line answers the two questions this feature will actually be
      asked from 5,000 miles away: is the strip even on, and did her press
      arrive. The date is printed because "on, but showing nothing" is the
@@ -2968,7 +2992,7 @@ function debugPaint(){
     cvState='rotate '+(momentKind==='calendar'?'SHOWING':
       (gBlocked?'['+gBlocked+']':!cvUp?'quiet: nothing upcoming':
        (Date.now()>=calendarDueAt?'due, waiting for slot '+next:'due '+shortIn(calendarDueAt))+
-       (calPassedOver?'   passed over '+calPassedOver:'')))+
+       (momentPassedOver.calendar?'   passed over '+momentPassedOver.calendar:'')))+
       '   every '+clampCalEveryMin(settings.calendareverymin)+'m'+
       '   hold '+clampCalHoldSec(settings.calendarholdsec)+'s';
   }
