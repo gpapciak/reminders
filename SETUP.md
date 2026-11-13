@@ -105,6 +105,16 @@ does, how to add a photo, and the safety model behind it. Leave the tab empty
 (or don't make it at all) and nothing changes: no photo ever appears, which is
 the deliberate default.
 
+### Tab: `Faces` — one row per family member, for medication mode
+
+| Name | File | CallsHer |
+|------|------|----------|
+| Greg | Greg.png | Mom |
+| Kai | Kai.jpg | Grandma |
+
+Optional. Without it the board uses the nine people built into it. See
+**§5b, "Medication mode"**, *Adding a face*.
+
 ### Tab: `Settings` — key/value
 
 | Key | Value |
@@ -129,6 +139,8 @@ the deliberate default.
 | calendarEveryMin | *(blank — see §3b)* |
 | calendarHoldSec | *(blank — see §3b)* |
 | calendarScreens | *(blank — see §3b)* |
+| meds | *(blank — see §5b)* |
+| medsMorning, medsEvening, medsAmStart, medsPmStart, medsStepMin, medsAmEnd, medsPmEnd, medsHowTo | *(optional — one row each, see §5b)* |
 
 - **standing** — no longer shown (removed 2026-09-14 so the calendar could
   show more upcoming events). A leftover row does nothing and can be deleted.
@@ -173,6 +185,12 @@ the deliberate default.
   **calendarScreens** — a screen showing only what is coming up on the
   calendar, either all the time or now and then. All blank means off, which is
   the default. **See §3b, "Just the calendar".**
+- **meds** — `on` turns on medication mode: twice a day the screen asks for her
+  pills and eye drops until she presses the buttons on her phone. Anything
+  else, or blank, is off. Optional extra rows `medsMorning`, `medsEvening`,
+  `medsAmStart`, `medsPmStart`, `medsStepMin`, `medsAmEnd`, `medsPmEnd`,
+  `medsHowTo` change which sessions run and when. **See §5b, "Turning it on
+  and off", for every key and its default.**
 
 ---
 
@@ -778,6 +796,144 @@ the prompt.
 
 ---
 
+## 5b. Medication mode — the screen asks until she presses
+
+Twice a day, the whole screen turns into a friendly reminder: a big photo of
+one of the family, with a speech bubble, asking her to take her pills and eye
+drops. It stays until she presses **both** buttons for that time of day on her
+phone. Then it says "All done!" for about a minute and the normal board comes
+back. It needs the check-in buttons from §5a; it reads the same presses.
+
+| | Starts | Asks again | Clears when she presses | Gives up at |
+|---|---|---|---|---|
+| Morning | 9:30 am | 9:40, 9:50, 10:00 | **Meds AM** and **Drops AM** | 2:00 pm |
+| Evening | 8:30 pm | 8:40, 8:50, 9:00 | **Meds PM** and **Drops PM** | 11:59 pm |
+
+Those are the defaults. Every time, the step between reminders, and each
+session on its own can be changed from `Settings`; see *Turning it on and
+off* below.
+
+- **9:30 / 8:30** is a wake-up or bedtime nudge ("Good morning, Mom! Time to
+  wake up…") with a rooster in the morning. The pill steps start at 9:40 / 8:40,
+  with a picture of her phone and the two button names at the bottom. By
+  10:00 / 9:00 it holds on a last, slightly livelier reminder.
+- **If she pressed both before 9:30, it never appears at all** that morning.
+- **If she pressed one**, it says so — "Pills ✓ — eye drops still to do" — and
+  asks only for the other.
+- **At the give-up time it just stops** and the board comes back. It never says
+  "missed" or "not taken"; the check-in chips already show what was pressed.
+- **Nothing makes a sound.** Every screen shows it, the bedroom too (dimmer
+  there in the evening).
+- It shows over everything else, including a `focus` message. Photos and
+  rotating messages wait until it is finished.
+
+**Two things it says on purpose**, so nobody is surprised by them:
+
+- Every reminder that mentions pills also says *"Today's spot in your pill box
+  already empty? Then you've had them — just press Meds AM."* The pill box is
+  the one record that can't be forgotten. Without that line, a day she took
+  them but forgot to press would have the screen asking her to take them
+  again.
+- If the board **can't be sure** what she has pressed — the wifi is down, or
+  the Sheet hasn't answered for a couple of minutes — it does **not** say
+  "time for your pills". It says *"Check your pill box. If today's is empty,
+  you're all done."* That is not a fault; it goes back to normal as soon as
+  the Sheet answers again.
+
+### Turning it on and off
+
+`Settings` → a row with `meds` in column A and `on` in column B. Change it to
+`off` (or delete the row) to stop it. It takes effect within about three
+minutes on every screen, with no redeploy.
+
+**Every key**, one row each in `Settings`. All of them except `meds` are
+optional. A missing row or a blank cell means the default. Capitals and
+spaces in column A don't matter (`Meds Am Start` works). All of them are read
+by the board itself, so changing one never needs a redeploy.
+
+| Key | What it does | Default |
+|---|---|---|
+| `meds` | `on` turns medication mode on for both sessions. Anything else, or blank, is off. | off |
+| `medsMorning` | `off` switches just the morning session off; `on` or blank keeps it. | on |
+| `medsEvening` | `off` switches just the evening session off; `on` or blank keeps it. | on |
+| `medsAmStart` | When the morning session begins (the wake-up reminder). | 9:30 AM |
+| `medsPmStart` | When the evening session begins (the bedtime reminder). | 8:30 PM |
+| `medsStepMin` | Minutes between the four reminders, both sessions. Whole minutes, 1–60. | 10 |
+| `medsAmEnd` | When the morning session gives up and the normal board returns. | 2:00 PM |
+| `medsPmEnd` | When the evening session gives up. Can't be later than 11:59 PM. | 11:59 PM |
+| `medsHowTo` | The phone pictures, as file names in `media/` (`a.png, b.png`), or `off`. | `meds-howto-1.png`, `-2`, `-3` |
+
+To start with **mornings only**: `meds` = `on`, `medsEvening` = `off`.
+
+Times can be typed as `9:30 am`, `9:30 AM`, `21:15`, or `7pm`, or entered as
+a Sheets time. The four reminders come at the start time, then one every
+`medsStepMin` minutes: with `10:15 am` and `5`, that's 10:15, 10:20, 10:25 and
+10:30.
+
+**A bad value never stops a session.** Each one is fixed on its own, and every
+fix is listed on the `/exec` page under `warnings` (and in the `MEDS` line of
+`?debug=1`):
+
+| If… | the board… |
+|---|---|
+| a time, step or on/off can't be read (`soonish`, `ten`, `yes`) | uses that key's default |
+| an end is `midnight` or `12:00 am` | uses 11:59 PM. Check-ins reset at midnight, so no session may cross it |
+| an end comes before the last reminder has had one full step | moves the end to just after it (start + 4 steps) |
+| a start is too late for four reminders before midnight | moves the start earlier so they fit |
+| a step is below 1 or above 60 | uses 1 or 60 |
+| the morning would run into the evening | ends the morning when the evening starts. If even that can't fit, uses the default times for both |
+
+`medsMorning` / `medsEvening` = `off` is the only way to switch a single
+session off on purpose. A typo there (`of`) keeps it **on** and warns, rather
+than silently dropping her pills.
+
+### Adding a face
+
+Each morning and each evening, four different people take a turn, one per
+reminder. Every screen shows the same person at the same moment.
+
+1. **A plain head-and-shoulders photo**, face filling most of it. It is cropped
+   to a circle, so a full-length or group photo shows a body or a crowd, not a
+   face. About 600 pixels tall is plenty; a 4,000-pixel phone original is
+   slow for the TV to load.
+2. **Remove the location** before adding it (on an iPhone: Share → Options →
+   turn off Location). The repo is public.
+3. Put the file in the `media/faces/` folder of the repo and push it. **The
+   name must match exactly, capitals included**: `Greg.png` is not `greg.png`.
+4. Either name it after one of the nine people already built in — Greg, Kathy,
+   Chris, Xheni, John, Kai, Seffa, Cole, Cam, as `Name.png` (Kai's is
+   `Kai.jpg`) — or add a row to a `Faces` tab:
+
+   | Name | File | CallsHer |
+   |---|---|---|
+   | Rosa | Rosa.jpg | Mom |
+
+   `CallsHer` is what that person calls her: the face says "Good morning,
+   **Mom**!". Once the `Faces` tab has any rows, it **replaces** the built-in
+   list, so list everybody there.
+
+A photo that won't load is skipped and the next person takes their turn. If no
+photo loads at all, a drawn sun (morning) or moon (evening) takes the place of
+the face.
+
+### The phone pictures
+
+On the pill reminders a picture of her phone sits at the side, showing which
+buttons to press. Take two or three screenshots of her phone, crop them to the
+phone screen, and save them in `media/` as `meds-howto-1.png`,
+`meds-howto-2.png`, `meds-howto-3.png`. They take turns every few seconds.
+Until they exist, the reminder simply lays out without them. To use other
+names, add a `medsHowTo` row listing the files (`a.png, b.png`); `off` hides
+them.
+
+### Before turning it on
+
+The script needs a redeploy (§6) for this; until then the board can't tell
+"nothing pressed" from "couldn't check", and every pill reminder shows as
+*"Check your pill box…"*. Open `/exec` afterwards and look for `"logOk":true`.
+
+---
+
 ## 6. Publish the script
 
 1. In the Sheet: **Extensions → Apps Script**.
@@ -857,6 +1013,17 @@ what the URL serves. This catches everyone once.
 > Shortcut shows the failure notification. Open `/exec` and look for
 > `"logForDate"`.
 
+> **So does medication mode (§5b).** Before the redeploy, `/exec` has no
+> `"logOk"`, and the board then refuses to say "time for your pills" at all.
+> Every pill reminder shows the neutral *"Check your pill box…"* instead. That
+> is the safe failure, but it isn't the feature. Open `/exec` and look for
+> `"logOk":true`. Then add `?lite=1` to the end of the URL and check that the
+> reply is short and contains `"lite":true`. That small reply is what the
+> screens ask for every 40 seconds while a reminder is up. The `Faces` tab
+> also needs this redeploy before it is read; until then the built-in list is
+> used. So do the `meds: …` notes about mistyped session times on `/exec`.
+> The times themselves work without it, because the board reads them.
+
 > **And the `Media` tab (§5) needs one, once — the first time this board is
 > set up with photo moments in mind.** Until that redeploy `/exec` never
 > mentions `"media"` at all and every row in `Media` is invisible to the
@@ -919,6 +1086,14 @@ yielded: focus` / `night screen` / `nothing upcoming`, or for `rotate` the
 reason it is quiet (`[focus]`, `[night]`, `nothing upcoming`) and when it is
 next due. It ends with how many entries are coming up.
 
+The `MEDS` line is for "why is (or isn't) the pill reminder up?": `off`, or
+`idle` with today's two windows, or the session and stage, what has been
+pressed (`pills ✓ drops —`), and which screen is showing. **`UNSURE: …`** means
+the board is deliberately showing the neutral *"Check your pill box"* and says
+why (`2 fetches failed in a row`, `log is 3m old`, `Log tab not read`, or
+`holding 2m more (was: …)` while it waits out its 3-minute hold). Look there
+first when a reminder looks wrong through the camera.
+
 It draws over the reassurance line, so prefer running it on the living-room or
 bedroom TV rather than her table display. Without the flag nothing is added to
 the page at all.
@@ -947,6 +1122,11 @@ Designed to be wrong in the safe direction rather than confidently wrong.
 | `gentle` and `focus` are both set | The takeover shows; the gentle message waits for it to clear. `warnings` says so. |
 | `gentleEveryMin` is 0 or nonsense | Pulled up to the 2-minute minimum. A typo cannot turn it into a strobe. |
 | `night` is blank or missing | The bedroom still goes dark at night and shows the built-in message. |
+| A pill reminder is up and the wifi dies | After two failed tries in a row (about a minute and a half), it stops saying "time for your pills" and says "Check your pill box. If today's is empty, you're all done." Once the Sheet answers again it stays on that message for 3 more minutes before going back, so a shaky connection doesn't make it flicker between the two. |
+| Google has a one-off hiccup | Nothing visible. A single failed check is ignored; it takes two in a row. |
+| She took her pills but forgot to press | The reminder keeps going until 2 pm / 11:59 pm, but every pill reminder points her at the pill box first: an empty spot means she's had them and only needs to press. |
+| She presses while the TV is asleep | When it wakes, the board sees the press and clears. If the reminder was on screen before it slept, "All done!" shows for a minute. A press from long before the reminder appeared never produces an "All done!", just the normal board. |
+| `meds` typed as `yes` or `On ` | Only `on` (any capitals, spaces ignored) turns it on. `yes` is off. |
 
 The rule behind all of it: **undated information expires, dated information does
 not.** Yesterday's plans are never shown as today's. A dated appointment is
@@ -956,7 +1136,12 @@ still a fact about that date no matter how old the fetch is.
 
 ## 9. Refresh behaviour
 
-- Sheet is re-read every **3 minutes**, with a cache-busting parameter.
+- Sheet is re-read every **3 minutes**, with a cache-busting parameter
+  (2 minutes on the table).
+- **While a pill reminder is up**, every screen also checks for button presses
+  every **40 seconds**, with a small request that reads only the `Log` tab. So
+  a press clears the screen within about a minute. Once both buttons are
+  pressed, or the give-up time passes, it stops.
 - The page fully reloads **hourly**, as protection against Silk misbehaving over
   days of uptime.
 - At midnight Pacific the date line rolls over on its own and a fresh fetch
@@ -986,6 +1171,11 @@ and without waiting for 8pm. Add any of these to that URL:
 | `&media=on` | turn photo moments on for this preview only |
 | `&photonow=1` | show one right now, instead of waiting out the cadence |
 | `&mediaholdsec=8` | …and hold it for this many seconds instead of the default |
+| `&meds=on&checkedin=none&now=2026-08-15T09:41` | the morning pill reminder, nothing pressed yet |
+| `&checkedin=medicine-am` | …with only Meds AM pressed (a comma list, or `none`) |
+| `&medslogat=5` | …and she presses both five seconds after it opens ("All done!") |
+| `&medsstale=1` / `&medserr=1` | …as if the Sheet hadn't answered: the neutral "Check your pill box" |
+| `&faces=none` / `&medshowto=off` | …with no photo (the drawn sun/moon) / no phone pictures |
 
 Two examples — the same moment, half past eleven, on the two kinds of screen:
 

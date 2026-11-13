@@ -211,6 +211,12 @@ experiment could reach.
 
 - **The night variant, and the focus takeover.** Both are page-level, both are
   described in `HANDOFF.md`; the operational points are:
+  - **medication mode** (when `meds` is `on`) takes **every** screen over at
+    9:30am and 8:30pm until both of that session's buttons are pressed, or
+    until 2pm / midnight. A screen showing a sun or a moon with a family face
+    on it at those times is expected, not a fault. `?debug=1` has a `MEDS`
+    line; `UNSURE:` on it means the screen is deliberately withholding the
+    pill instruction because it can't confirm the log;
   - **every screen dims 8pm–6am** on the server's clock, so a drifting Fire TV
     clock cannot switch one at the wrong hour. The living areas keep the whole
     board and only change colour; the bedroom drops to one line;
@@ -284,6 +290,33 @@ writes its heartbeat no more often than before and the change costs no extra
 Sheet writes at all. The durable fix is cheaper reads: `doGet` calls
 `getDataRange()` on every tab on every call, including `Days` and `Events`,
 which change a few times a week.
+
+**Medication mode's fast poll (2026-11-13).** While a medication session is up
+and not yet cleared, **every** screen polls for check-ins every 40s, so the
+screen clears soon after she taps. Those polls use `?lite=1`, a separate branch
+of `doGet` that reads only the `Log` tail (no `Days`, `Events`, `Media`,
+`Settings`, no heartbeat). The full read keeps its normal cadence alongside.
+The poll is checked every 10s and fires once the log is ≥40s old, so the
+measured cadence in headless testing was **one lite call every ~50s**
+(≈1.2/min/screen). It stops the moment both kinds are logged or the window
+closes.
+
+| | lite calls/day | vs 1,680 full calls |
+|---|---|---|
+| typical — both sessions cleared in ~20 min, 3 screens | 2 × 20 × 3 × 1.2 ≈ **144** | +9% calls |
+| bad day — one session runs 60 min | ≈ 290 | +17% calls |
+| worst — both sessions run to cutoff unlogged (4.5 h + 3.5 h) | 480 × 3 × 1.2 ≈ **1,730** | +103% calls |
+
+Calls are not runtime, and that is the point of `lite`. A full read was
+measured at 4.0–8.5s; the lite read skips every `getDataRange()` and the
+heartbeat's lock and write, so it should cost a fraction of that. Most of what
+remains is Apps Script's fixed per-request overhead. **Not yet measured**: it
+can't be until the script is deployed. After the redeploy, compare a lite and
+a full execution in Apps Script → Executions. If lite turns out no cheaper
+than full, the worst-case day roughly doubles the endpoint's runtime, and the
+lever is `MEDS_POLL_MS` in `index.html` (60s halves it). The worst case also
+needs a session ignored twice in one day, which is exactly when the
+family-alert hook (not built) would be wanted anyway.
 
 **One stray row to delete.** Measuring the above sent a handful of requests
 with `?screen=measure-only`, so the `Status` tab has a `measure-only` device

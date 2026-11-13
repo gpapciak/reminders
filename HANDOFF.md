@@ -105,20 +105,32 @@ data a household depends on.
 | `&calview=takeover` / `&calview=rotate` | force the calendar view setting. Goes through the same `calendarViewSetting()` as the Sheet, so `&calview=takeovr` is off here too |
 | `&caleverymin=N` / `&calholdsec=N` | override its cadence / hold, still through the same clamps |
 | `&calnow=1` | show a calendar moment ~50ms after boot. Skips the wait and the slot allocation only; the shared gate and the "anything upcoming" check still run. Not carried across the hourly reload |
+| `&meds=on` | medication mode on, through the same `medsEnabled()` as the Sheet (`&meds=yes` is off). Pick the session and stage with `&now=` |
+| `&checkedin=none` / `=medicine-am,drops-am` | which check-ins are pressed today (stamped 3 min ago), replacing the demo's seeded ones |
+| `&medslogat=N` | press both of the current session's remaining kinds N s after boot, through `setLog()` — a real live completion. Not carried across the reload |
+| `&medsstale=1` / `&medserr=1` | today's log is 10 min old and stays so / two fetches failed in a row — the neutral variant |
+| `&faces=none` / `&medshowto=off` | no face decodes (drawn sun/moon) / no how-to pictures |
+
+**The demo's check-in seed moved after the hooks (2026-11-13)**, so with
+`&now=` on another date the chips belong to the pretended day. Before, every
+`&now=` on another date showed eight grey chips. Demo only; the live board is
+unaffected (verified byte-identical, below).
 
 Set as a clock *skew*, not a frozen time, so a boundary crossing can be watched
 happening. They are carried across the hourly reload too (`photonow` is not —
 it is a one-shot preview action, not persistent state, so it does not refire
 on the next hourly reload).
 
-### The Sheet (five tabs)
+### The Sheet (seven tabs)
 
 | Tab | Shape | Feeds |
 |-----|-------|-------|
 | `Days` | one row per date: `Date, Today, Notes, Reassurance` | TODAY'S ROUTINE, NOTES |
 | `Events` | one row per event: `Date, Description` | CALENDAR |
 | `Media` | one row per photo: `File, Caption, Screens` | occasional photo-moment overlays |
-| `Settings` | key/value: `standing`, `reassure`, `notes`, `alertAfterMinutes`, `focus`, `focusUntil`, `night`, `nightStart`, `nightEnd`, `media`, `mediaEveryMin`, `mediaHoldSec`, `calendarView`, `calendarEveryMin`, `calendarHoldSec`, `calendarScreens` | constants shown every day, plus the extra display modes |
+| `Faces` | optional, one row per person: `Name, File, CallsHer` | medication mode's faces (else the built-in `FACES_DEFAULT`) |
+| `Log` | written by her phone: `Timestamp, Kind, Date` | check-in chips, medication mode |
+| `Settings` | key/value: `standing`, `reassure`, `notes`, `alertAfterMinutes`, `focus`, `focusUntil`, `night`, `nightStart`, `nightEnd`, `media`, `mediaEveryMin`, `mediaHoldSec`, `calendarView`, `calendarEveryMin`, `calendarHoldSec`, `calendarScreens`, `checkins`, `meds`, `medsAmStart`, `medsAmEnd`, `medsPmStart`, `medsPmEnd`, `medsHowTo` | constants shown every day, plus the extra display modes |
 | `Status` | written BY the board: `Device, Last seen, Ago, Status` | nothing — it is the heartbeat readout |
 
 Headers are matched by name, so column order is free. Multi-line cells
@@ -168,7 +180,7 @@ added later should extend an axis rather than add a fifth branch.
 | Axis | Values |
 |---|---|
 | **Palette** | `day` — the warm paper/ink board · `night` — near-black ground, warm low-luminance amber text |
-| **Layout** | `full` — header + grid + reassurance · `single-message` — header + one dominant centred message + reassurance · `calendar` — header + upcoming calendar entries + reassurance (added 2026-10-24, see *Calendar view*) |
+| **Layout** | `full` — header + grid + reassurance · `single-message` — header + one dominant centred message + reassurance · `calendar` — header + upcoming calendar entries + reassurance (added 2026-10-24, see *Calendar view*) · `meds` — header + face, speech bubble, pill-box check, footer and how-to (added 2026-11-13, see *Medication mode*) |
 
 **The two axes are selected independently**, and that is the point of the
 design rather than an implementation detail. Palette is decided first — is this
@@ -183,6 +195,7 @@ one from the other.
 | **Night, minimal** | night | single-message | bedroom | the night orientation text |
 | **Focus** | day *or* night | single-message | all | an ad-hoc takeover message |
 | **Calendar view** | day *or* night | calendar | all, or `calendarScreens` | upcoming entries only (`calendarView = takeover`) |
+| **Medication** | day *or* night | meds | all | a family face asking for pills and drops (`meds = on`, 9:30am / 8:30pm until logged) |
 
 **The dark full board is not a fourth mode somebody added.** It is what falls
 out of asking the two questions separately instead of together, and it was
@@ -202,6 +215,10 @@ one line would solve the wrong problem by removing the thing she is looking at.
 0. **Palette first, on its own.** `night = this screen is night-enabled AND
    deviceNow() is inside its night window`. That answer stands regardless of
    which layout is chosen below.
+½. **A medication session is up, or its "All done" is showing → the `meds`
+   layout**, in that palette. Inserted 2026-11-13 **above focus**: it is the
+   only thing on the board that outranks a focus message, and nothing else may
+   be put there without the same argument (see *Medication mode*).
 1. A focus message is active → single-message with the focus text, in that
    palette. So one takeover shows warm at 2pm and dark at 3am, on any screen.
 2. Else if `night` and this screen's night layout is `single` (the bedroom) →
@@ -1215,6 +1232,258 @@ the spoken name of each kind.
 
 Read path adds `log` (keyed by kind, epoch ms, today only) and `logForDate`.
 
+## Medication mode
+
+Added 2026-11-13. **Ships off** (`meds` absent = off) until Greg turns it on
+in the Sheet and it has been watched on the real TV through the Tapo camera.
+
+### Why it exists — departure #1, revisited
+
+Departure #1 cut the medication card because she had in-person support, and
+said to revisit if that changed. **It has changed.** Agency care is sporadic:
+no settled schedule, and some days nobody comes. **Evening meds are always hers
+alone, seven nights a week.** Her difficulty is *initiation and
+follow-through*: she does not start without a prompt, and once started she is
+slow to finish. Rotating care staff also don't know her routine, so a loud,
+unmissable screen prompts **whoever is in the room**, not just her.
+
+So the board now takes itself over at set times and stays until she logs the
+check-ins on her phone. **No audio**: Silk will not play sound without a user
+gesture, and the TV can't yet be reached over ADB. Motion is silent and modest.
+
+### Behaviour
+
+| Session | Stages (LA) | Cleared by | Gives up at |
+|---|---|---|---|
+| Morning | 9:30 / 9:40 / 9:50 / 10:00 | `medicine-am` **and** `drops-am` | 2:00 pm |
+| Evening | 8:30 / 8:40 / 8:50 / 9:00 | `medicine-pm` **and** `drops-pm` | 11:59 PM |
+
+- **Start** at stage 1's time, unless both kinds are already logged today — a
+  session she pre-empted never appears, wake-up stage included.
+- **Advance by clock**, one stage every `MEDS_STAGE_MIN` (10), holding at 4.
+- **Clear only on a real log**, read through `todaysCheckIns()` — the same
+  date-guarded reader the chips use. There is no second path to
+  `logRow.kinds` (invariant). The session-complete check (`medsSessionDone`)
+  lives in a `MEDS-PURE` block that `test-log-kinds.js` evaluates against the
+  endpoint's real `readLog()` output, full and lite, for both sessions — so
+  the drops-am/`norm()` class of bug cannot silently hold the screen up.
+- **Partial** — one kind logged: *"Pills ✓ — eye drops still to do"* (or the
+  reverse), asking only for the other. The tick is her own press, reported.
+- **Done** — when the last kind lands **while this page is showing the
+  prompt**, *"All done! ✓ Pills and drops, 9:47 AM."* for `MEDS_DONE_MS`
+  (60s), then the board. Never a standing state: it is in-memory only, never
+  cached, and a completion whose press predates the prompt by more than
+  `MEDS_STALE_MS` (a TV waking on a stale cache hours later) returns quietly to
+  the board instead.
+- **Give up** at the cutoff: back to the board. No "not taken" claim anywhere;
+  the chips already show what is unlogged.
+- **Settings overrides** (page-side, no redeploy to change): `medsMorning`,
+  `medsEvening` (per-session on/off), `medsAmStart`, `medsPmStart`,
+  `medsStepMin` (1–60), `medsAmEnd`, `medsPmEnd`. Defaults and every rule
+  are in one function, `medsResolveTimes()`, between `MEDS-TIMES` markers.
+  Revised 2026-11-13 at Greg's request: the first version threw out all four
+  times if any one was bad. Now **each value degrades on its own and no
+  session is ever skipped**:
+  - unreadable → that key's default;
+  - an end of midnight/12:00 am → 11:59 PM;
+  - an end before the last stage has had a full step → start + 4 steps;
+  - a start too late for four stages → pulled earlier;
+  - overlapping sessions → the morning ends where the evening starts, else
+    defaults for both.
+  - An unreadable on/off keeps the session **on**: `off` is the only way to
+    drop one.
+
+  11:59 PM is a hard ceiling (the evening default moved there from midnight),
+  because a session must stay inside the one LA date its log block is for.
+  **Every adjustment is a warning**, in `?debug=1` and on `/exec`. The page
+  can't write into `/exec`, so `apps-script.gs` carries a byte-identical copy
+  of the function used only for those warnings (`medsTimeWarnings()`).
+  `test-log-kinds.js` fails if the copies differ, checks that the two clock
+  parsers agree on 15 inputs, and exercises every rule. Verified headless:
+  10:15 + 5-minute steps gives the board at 10:14 and stages 1–4 at 10:16,
+  :21, :26, :31; an end of 10:20 clamps to 10:35; evening off leaves the
+  morning running; the defaults are unchanged (23:58 stage 4, 23:59 board).
+
+### The safety model
+
+The feature tells someone with short-term memory impairment to take pills.
+Its failure is the double dose BRIEF.md calls the safety-critical risk, with
+the board as the cause. Two rules carry the whole feature, both in
+`medsScreen()`:
+
+1. **Stale data never becomes a pill instruction** (a hard invariant, also
+   listed below). If the board cannot vouch for today's log *right now*, it
+   shows the neutral variant: same face, same bubble, *"Check your pill box.
+   If today's is empty, you're all done."* No footer and no how-to, because
+   both are instructions. `medsUnconfirmed()` returns the reason:
+   - the block is not for today (no fetch since midnight);
+   - **`logOk` is not true**: the endpoint could not read the Log tab. "No
+     rows" and "couldn't look" both arrive as `log:{}`, so the endpoint now
+     says which (`readLogChecked()`);
+   - **`MEDS_FAIL_STREAK` (2) fetches in a row failed**, full or lite;
+   - the block is older than `MEDS_STALE_MS`, **2 minutes**: three fast
+     polls. The ordinary jitter of a 40s poll plus a 4–8s endpoint never
+     trips it, and a board that has quietly stopped hearing from the Sheet
+     stops instructing within ~2 minutes, however the failures fall. `logRow.at`
+     is a `Date.now()` stamp and `logRow` is cached, so this survives the
+     hourly reload.
+
+   **Anti-flap, 2026-11-13 (Greg's flag).** The first build withheld on a
+   *single* failed fetch. Apps Script throws occasional one-off errors, so the
+   screen would flip to the neutral message and back 40s later, two different
+   messages in a minute. Two changes:
+   - **Two failures in a row, not one.** One failure leaves the log ≤ ~90s
+     old, the same blind spot as ordinary polling, and the 2-minute age cap
+     still bounds every pattern of failures.
+   - **A 3-minute minimum hold** (`MEDS_UNSURE_HOLD_MS`). Once shown, the
+     neutral screen stays until 3 minutes after the *last* moment the raw
+     answer was "unsure", even if the next poll succeeds. Two-in-a-row alone
+     still flaps on an endpoint failing ~half the time. Holding errs in the
+     safe direction, because the neutral screen is itself a complete
+     instruction: look at the box, press if it's empty. The hold is set only
+     in `medsTrack()`, only on stages that would otherwise instruct (so a
+     slightly old log during the 9:30 nudge can't carry into 9:40), and
+     cleared when the session ends. `medsUnsureNow()` is what the screen
+     reads; `?debug=1` shows `UNSURE: holding 2m more (was: …)`.
+
+   Verified end to end through the real fetch path: one failed poll → no
+   change; two in a row → neutral on the second; good fetch → neutral held,
+   instruction back 3:02 later (and still neutral when stage 3 began
+   mid-hold).
+
+   The asymmetry it does **not** need: a log that says she *has* pressed is
+   never stale. Rows are append-only and first-press-wins, so a press seen
+   once stays true all day. Only "not pressed" goes out of date. Stage 1 (the
+   wake/bedtime nudge) shows normally even when unconfirmed, because it asks
+   for nothing.
+2. **The pill box is the tie-breaker.** Rule 1 cannot cover *fresh data, but
+   she took them and forgot to press*, which is exactly the case the chip copy
+   rules name (*"the double-dose risk running in reverse, with the board
+   causing it"*). So every screen that asks for pills (stages 2–4, and the
+   pills-still-to-do partial) also carries *"Today's spot in your pill box
+   already empty? Then you've had them — just press Meds AM."* The pill box is
+   the one record in the house that can't be forgotten. Added at Greg's
+   decision, 2026-11-13; **do not remove it from any pill stage.**
+
+**Why the clock may drive this at all.** The test in *Carve-out* is "does it
+change what the board claims, or only how that claim looks?" This changes
+what the board *says*, so it needs its own argument. The clock **starts and
+advances a prompt**; it never asserts that anything happened or didn't. Only a
+log ends the prompt, and the cutoff removes it without a claim. What the
+prompt would otherwise *imply* — "you haven't taken them" — is exactly what
+rules 1 and 2 defuse: the screen never relies on "not pressed" without fresh
+data, and never asks for pills without pointing at the physical answer.
+
+### Priority — the only thing above focus
+
+`selectMode()` step ½. A focus message is somebody saying where they are; a
+medication session is the one prompt here with a real cost if it is missed.
+It is also short (10–30 minutes on a normal day) and bounded by its own
+cutoff, after which focus comes straight back. `momentBlockedBy()` returns
+`'meds'` first, so photos, gentle messages and the calendar moment never
+start during a session, and one already up fades within a second (verified: a
+photo up at 9:29:40 is gone at 9:30:03). The calendar *takeover* is below it
+in `selectMode()` already. Nothing else may go above focus without an argument
+this strong, and the code says so where it does it.
+
+### The look
+
+Header kept: the date and the clock are true in every mode, and "9:47" beside
+"time for your pills" is the comparison she can't make from memory. The panel
+replaces the grid, the strip and the reassurance line: a family face cropped
+to a circle (`object-fit:cover`, `object-position:50% 32%`, eyes sit above
+centre in a headshot), a speech bubble whose tail points at the face, the
+pill-box check under it, the footer naming the two buttons, drawn as small
+button shapes in the chips' own words (Meds AM / Drops AM), and on the right
+the how-to pictures in a phone frame headed ON YOUR PHONE.
+
+- **Morning**: warm sky, sun rays rotating slowly behind the face, a rooster
+  on stage 1 (orange comb: **no red anywhere**).
+- **Evening**: dusk, plum to near-black, a warm crescent moon, twinkling amber
+  stars, a soft halo instead of rays. Never white or blue, the night
+  palette's rule.
+- **Motion**: transform/opacity only. Rays 90s/turn; the bubble pops in only
+  when the screen's *content* changes (a stage, a press), not on every fetch
+  repaint; the face bobs, a little faster at stage 3 and with a slight swell
+  at stage 4, where the bubble also breathes. `prefers-reduced-motion` stops
+  all of it.
+- **Everything drawn is inline SVG/CSS.** The only files are the face photos
+  (decode-gated, like photos) and the how-to pictures.
+
+**Night, and the bedroom — the judgement call.** The evening session lands
+inside the night window on every screen. The night palette's intent is *dim,
+warm, no white, no blue*, and on the living areas *still readable*. The
+bedroom's night line is deliberately 2.17:1, because nobody needs to act on
+it. This screen *does* have to be acted on, and at 8:30pm she is up. So:
+
+| | message | footer | buttons | photo opacity |
+|---|---|---|---|---|
+| morning | 16.0:1 | 9.1:1 | — | 1 |
+| evening, living areas | **7.0:1** | 5.2–5.9:1 | 6.1:1 | .9 |
+| evening, bedroom | **4.4:1** | 3.0:1 | 4.2:1 | .55 |
+
+A first draft of the living-area evening was 10.3:1, the brightest thing on
+the living-room board after dark. It was brought down to sit beside the night
+board's own ink (6.3:1). The bedroom block (`[data-screen="bedroom"]
+[data-palette="night"] .meds[data-session="pm"]`, keyed on screen and
+palette like the bedroom's night block) sits between its night line and the
+living areas. It also has no rays, fainter stars that don't twinkle, and a
+photo dimmed to .55, since a white-backed headshot is otherwise the brightest
+object in a dark room. **Provisional, like every night number**: look at it
+in the room.
+
+### Faces
+
+Four **distinct** people per session, one per stage, drawn deterministically:
+the list sorted by name, shuffled by a PRNG seeded with `date|session`. Every
+screen shows the same face at the same moment, and the hourly reload never
+swaps one mid-stage. Pictures are decoded **in draw order, one at a time,
+until four succeed** (`preloadPhoto()`, the photo path). A file that won't
+decode is skipped and the next person takes the slot. With every file loading
+(the normal case) every screen agrees; if one screen can't load one file, only
+that screen substitutes. Fewer than four → reuse in turn. None → a drawn sun
+or moon face. Never an empty circle. While the draw is still decoding (the
+first seconds after a reload mid-session) the drawn face shows, then the photo.
+
+The list: the `Faces` tab (`Name | File | CallsHer`) if it has rows, else
+`FACES_DEFAULT` (the nine people, `Name.png`, Kai's `.jpg`). A tab, so family
+can add someone without a code change; built-in so a missing tab still works.
+`{name}` in the copy is the face's `CallsHer`; with no face it is removed with
+its comma.
+
+### How-to pictures — stills, not video
+
+The request was a looping silent screen recording. **Built as still pictures
+instead**, at Greg's call, because the board has been stills-only on purpose
+(see *Photo moments*: Silk's stability over days of video decode is unproven).
+Two or three screenshots of her phone, cross-fading every 3.5s, say "here's
+how" as well as a clip does. Files `media/meds-howto-1..3.png` by default, or
+`medsHowTo` (comma list, `off` = none). Decode-gated: until one exists, the
+panel lays out without the phone. Only on stages that ask for something
+(2–4, partials); never on stage 1, done or the neutral variant. Every face and
+picture is released when the session ends (`medsRelease()`).
+
+### Polling
+
+While a session is up and not yet cleared, **every** screen polls every 40s
+(`MEDS_POLL_MS`) using **`?lite=1`**, a new `doGet` branch that reads only
+the Log tail through the same `readLogChecked()`. The full read keeps its
+normal cadence alongside. A poll fires at the moment the session appears too,
+so stage 1 starts on fresh data. Backed off on failure (one attempt per 40s,
+not per 10s check). Arithmetic in `OPERATIONS.md`. A client talking to an
+endpoint that predates `lite` gets the full response and treats it as a full
+fetch, so the two halves can deploy in either order. Without `logOk`, though,
+every pill stage shows the neutral variant until the redeploy.
+
+### The family-alert hook — not built
+
+`onMedsSessionGaveUp(info)` is called once, by each page, when a session it
+was showing reaches its cutoff with something unpressed. It logs to the
+console and feeds `?debug=1`. An alert goes there. Every screen calls it, so
+an implementation must de-duplicate (a server-side write keyed on
+date + session, first one wins, the check-in shape). It must never block the
+board.
+
 ## Deliberate departures from BRIEF.md
 
 Each of these was a decision, not an oversight. Do not "restore" them without
@@ -1232,7 +1501,11 @@ asking.
    should do. See "Check-ins" below, and read the copy rules there before
    changing a single word on those two chips.
    `--ok-*` is now live as the pressed state. `--soon-*` is still dormant.
-   **Revisit the full card only if in-person support ends.**
+   **Revisited 2026-11-13: in-person support became sporadic and evening meds
+   are hers alone, so medication is back as a prompt.** Still no card and
+   still no status: *Medication mode* starts a prompt on the clock and ends it
+   only on her log, and it never claims a dose was or wasn't taken. Read its
+   safety model before touching it.
 2. **No meals section, no IMPORTANT section.** Same reasoning: redundant with
    in-person support.
 3. **TODAY is a routine, not a task list.** *(And it is the LEAST-USED element
@@ -1324,6 +1597,21 @@ asking.
 - **The calendar view reads only dates.** Upcoming = `date >= today`, compared
   on every render. It never claims anything happened — nothing on it is past —
   so it does not touch "nothing is inferred from time passing".
+- **Stale data never becomes a pill instruction.** If medication mode cannot
+  confirm today's log (not today's block, `logOk` not true, the last fetch
+  failed, or older than `MEDS_STALE_MS`), it shows the neutral pill-box
+  variant and tells her to take nothing. She may already have.
+- **Every screen that asks for pills points at the pill box.** The
+  *"already empty? then you've had them"* line covers "took them, forgot to
+  press", which rule above can't. Never drop it from a pill stage.
+- **Medication mode is the only thing above focus.** One step in
+  `selectMode()`, and `momentBlockedBy()` checks it first. Do not put anything
+  else there.
+- **A medication session ends only on a log or at its cutoff.** Never on
+  elapsed time as evidence. Its "All done" needs a backstop like any
+  temporary screen: it is an absolute `Date.now()` deadline re-checked every
+  second by `medsTrack()`, the same model as a focus until-instant, and it
+  never survives a reload.
 
 ## The safety model
 
@@ -1352,6 +1640,13 @@ asking.
   once-a-second interrupt re-checks its until-instant, so it is pulled off the
   screen at its deadline rather than being allowed to finish a hold it has
   stopped being true for.
+- **Stale data never becomes a pill instruction** (2026-11-13). The check-in
+  rule "a stale green chip tells her she took a pill she hasn't" has a mirror
+  image once the board can *ask* for pills: a stale grey log tells her to take
+  a pill she has taken. So "not pressed" is trusted only while fresh (≤2 min,
+  last fetch OK, Log tab actually read, today's block). Otherwise the screen
+  shows *"Check your pill box. If today's is empty, you're all done."* See
+  *Medication mode*.
 
 ## Verified vs. not
 
@@ -1514,6 +1809,39 @@ headless Chrome over CDP, endpoint blocked at the network layer throughout):
   `offsetLeft` inside columns (the date reprint depends on it) are assumed from
   `.today-list.two` working there, not tested.
 
+**Verified for medication mode** (2026-11-13; headless Chrome over CDP, plus
+`node test-log-kinds.js` 36/36):
+- **Feature off is byte-identical** to the previous `index.html`, served side
+  by side with the same cached data and the endpoint blocked: grid / single /
+  calendar `outerHTML`, layout, mode, reassurance, header size, chips and
+  overlay state. 11 URL shapes (plain, `?screen=` ×3, `?checkins=1`, demo,
+  night, focus, calendar takeover, bedroom night, `&now=`) × 5 viewports
+  (1280×720 / 650 / 510, 800×600, 1920×1080): **55 of 55 identical**.
+- **Every state at 1280×720 and 1280×650**: morning stages 1–4, both
+  partials, done, neutral (stale and fetch-failed), stage 1 while stale (shows
+  normally), no how-to, no faces; evening stages 1–4, partial, done and
+  neutral on `table`, `living-room` and `bedroom`. **81 renders: no clip, no
+  scroll, no letterbox, nothing escapes the panel.** Bubble 45–62px, footer
+  22–28px, pill-box line 22–25px, all from the same ceilings by fit-down.
+- **The real fetch path, end to end, no demo hooks**: endpoint intercepted at
+  the network layer and played by the test, session window set through the
+  Settings overrides around the real clock. Prompt at stage 2 within a second
+  of boot (a lite poll fired at session start). Lite polls every ~50s, full
+  read on its own 120s. A Meds AM press → partial on the next fetch. Drops AM
+  → *All done* on the next lite poll, back to the board 61s later, lite
+  polling stopped. Endpoint failing mid-session → neutral variant on that
+  same failed poll; recovered → the stage again on the next. *(That was the
+  first build. Since the anti-flap change: one failure → no change, two in a
+  row → neutral, recovery → neutral held 3 minutes. See the safety model.)*
+- **Boundaries**: 9:29 board, 9:30 stage 1, 13:59 stage 4, 14:00 board, 23:59
+  stage 4; both logged early → never appears; `meds=yes` → off; beats focus
+  and the calendar takeover; no moment starts during a session, and a photo up
+  at 9:29:40 is gone by 9:30:03.
+- **Not verified**: anything on the Fire TV. Silk's handling of the SVG
+  `<use>` stars, the CSS animations' cost on a Fire TV, the lite read's real
+  runtime (see `OPERATIONS.md`), and whether the bedroom evening numbers suit
+  the room.
+
 **Verified on the actual Fire TV:**
 - The board renders correctly in Silk and fills the screen.
 - **Midnight rollover against the live Sheet** — the date line advanced, the
@@ -1591,7 +1919,11 @@ headless Chrome over CDP, endpoint blocked at the network layer throughout):
 - **Times in the routine.** It currently shows order but not position in the
   day. Typing `8:00 am Breakfast` and styling the time would let her answer
   "what's next" against the clock, without the board claiming anything is done.
-- **Medication**, if the support arrangement changes.
+- **Medication mode, in the room.** Built (2026-11-13), ships off. Whether
+  the playful look prompts her without alarming her, whether ten minutes is
+  the right step, whether 2pm is too late a give-up, and the bedroom evening's
+  brightness are all questions for the camera. Audio, ADB and the
+  family-alert hook (`onMedsSessionGaveUp`) are deferred, not forgotten.
 - **Where the check-in strip goes.** Now in the left column between the routine
   and the notes, which costs the calendar nothing and costs the routine nothing
   up to six items. It still stands down on a twelve-or-more-item routine. The

@@ -76,6 +76,13 @@ function doGet(e) {
      interaction she trusts and one she taps twice. It returns its own small
      JSON and nothing below this line runs. */
   if (e && e.parameter && e.parameter.log) return handleLogWrite(e);
+  /* THE LITE READ — today's check-ins and the server clock, nothing else.
+     Medication mode polls every ~40s while a session is waiting on her, so
+     that the screen clears soon after she taps. Paying for the whole board's
+     read (every tab, getDataRange) forty times an hour on every screen is
+     exactly the cost OPERATIONS.md warns about; the Log tail is all that
+     poll needs. The full read keeps its own normal cadence alongside. */
+  if (e && e.parameter && e.parameter.lite) return handleLiteRead(e);
 
   var now = new Date();
   var out = {
@@ -104,6 +111,14 @@ function doGet(e) {
        information — it must expire at midnight with no network. */
     log: {},
     logForDate: '',
+    /* True only when the Log tab was actually READ. "No rows today" and "could
+       not read the tab" both arrive as log:{}, and medication mode must never
+       mistake the second for the first — a board that cannot see her press
+       would otherwise go on telling her to take pills she has taken. */
+    logOk: false,
+    /* Medication mode's faces: [{name, file, callsHer}] from the Faces tab.
+       Empty means "use the list built into index.html". */
+    faces: [],
     screen: '',
     heartbeat: 'off',
     warnings: []
@@ -114,9 +129,11 @@ function doGet(e) {
     readDays(ss, tz, out);
     readEvents(ss, tz, out);
     readMedia(ss, out);
+    readFaces(ss, out);
     readSettings(ss, tz, out);
-    readLog(ss, out);              /* after nothing in particular; needs only serverLaDate */
+    readLogChecked(ss, out);       /* after nothing in particular; needs only serverLaDate */
     resolveTimedMessages(out);     /* after settings: it reads focus/gentle + their untils */
+    medsTimeWarnings(out);         /* after settings: notes only, the board decides */
     recordHeartbeat(ss, e, out);   /* after settings: it reads alertAfterMinutes */
   } catch (err) {
     out.ok = false;
@@ -287,6 +304,40 @@ function readMedia(ss, out) {
       .map(normScreenToken)
       .filter(function (s) { return s.length > 0; });
     out.media.push({ file: file, caption: caption, screens: screens });
+  }
+}
+
+/**
+ * "Faces" — one row per family member, for medication mode.
+ *   Name | File | CallsHer
+ *   Greg | Greg.png | Mom
+ *
+ * File is a bare filename in the repo's media/faces/ folder (or a full
+ * https:// URL). CallsHer is what that person calls her — it is the {name} in
+ * "Good morning, Mom!". A row with no File is skipped, like Media.
+ *
+ * Optional. A missing or empty tab means index.html uses its own built-in
+ * list, so the tab exists only to let family add someone without a code
+ * change. Deliberately NOT a "no tab" warning: absent is the normal state.
+ */
+function readFaces(ss, out) {
+  var sh = ss.getSheetByName('Faces');
+  if (!sh) return;
+  var rows = sh.getDataRange().getValues();
+  if (rows.length < 2) return;
+  var idx = headerIndex(rows[0]);
+  var cName = col(idx, ['name', 'person', 'who']);
+  var cFile = col(idx, ['file', 'filename', 'photo', 'image']);
+  var cCalls = col(idx, ['callsher', 'calls', 'callsherby', 'nameforher']);
+  if (cFile < 0) { out.warnings.push('Faces: no "File" column - using the built-in list'); return; }
+  for (var r = 1; r < rows.length; r++) {
+    var file = cell(rows[r], cFile);
+    if (!file) continue;
+    out.faces.push({
+      name: cName < 0 ? '' : cell(rows[r], cName),
+      file: file,
+      callsHer: cCalls < 0 ? '' : cell(rows[r], cCalls)
+    });
   }
 }
 
@@ -608,10 +659,168 @@ function readLog(ss, out) {
       var t = ts.getTime();
       if (!out.log[kind] || t < out.log[kind]) out.log[kind] = t;
     }
+    out.logOk = true;
   } catch (err) {
     /* Same posture as the heartbeat: one bad tab never takes the board down. */
     out.log = {};
+    out.logOk = false;
     out.warnings.push('log: ' + String((err && err.message) || err));
+  }
+}
+
+/* An empty tab (headers only) is a successful read of nothing: logTail()
+   returns null for it, and readLog() returns early above without setting
+   logOk. Handled here rather than by restructuring readLog, so the read path
+   the chips depend on is unchanged line for line. */
+function readLogChecked(ss, out) {
+  readLog(ss, out);
+  if (!out.logOk) {
+    try {
+      var sh = ss.getSheetByName('Log');
+      if (sh && sh.getLastRow() < 2) out.logOk = true;
+    } catch (err) { /* readLog already warned; logOk stays false */ }
+  }
+}
+
+/**
+ * ?lite=1 — the medication-mode fast poll. Same readLog() as the full read,
+ * so the chips and the session-complete check can never disagree about what
+ * was pressed. No heartbeat: the full read still runs on its own cadence and
+ * records that.
+ */
+function handleLiteRead(e) {
+  var now = new Date();
+  var out = {
+    ok: true, lite: true,
+    serverEpochMs: now.getTime(),
+    serverLaDate: Utilities.formatDate(now, TZ, 'yyyy-MM-dd'),
+    log: {}, logForDate: '', logOk: false, warnings: []
+  };
+  try { readLogChecked(SpreadsheetApp.getActiveSpreadsheet(), out); }
+  catch (err) { out.ok = false; out.error = String((err && err.message) || err); }
+  return ContentService
+    .createTextOutput(JSON.stringify(out))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ---------- medication mode: session times ----------
+ *
+ * The board decides the session times itself, page-side, so changing them is a
+ * Settings edit with no redeploy. This copy exists ONLY to put the same notes
+ * on /exec's warnings list (see medsTimeWarnings), and it must stay a
+ * character-for-character copy of the block in index.html —
+ * test-log-kinds.js checks.
+ */
+/* MEDS-TIMES-BEGIN
+   The session times: built-in defaults, Settings overrides, and every rule
+   about a bad value, in ONE function. An IDENTICAL copy lives in
+   apps-script.gs, where it is used only to put the same notes on /exec's
+   warnings list; this copy is the one that decides what the screen does.
+   test-log-kinds.js fails if the two copies ever differ by a character.
+
+   ES5 on purpose (it has to run in Apps Script too). `s` is the Settings
+   object (keys already normalised: medsAmStart -> medsamstart); `parseMin`
+   is the caller's clock parser — "9:30 am" -> 570, null if unreadable.
+
+   The rules, all of which degrade and none of which skip a session:
+     - blank -> the default, silently; unreadable -> the default + a warning;
+     - medsMorning / medsEvening: "on" or blank = on, "off" = off;
+     - medsStepMin: whole minutes 1-60, else clamped/defaulted + a warning;
+     - no session may run past 11:59 PM — check-ins reset at midnight. An end
+       of midnight / 12:00 am becomes 11:59 PM; a start too late to fit four
+       stages before then is pulled earlier;
+     - an end before the last stage has had one full step is pushed to that
+       point;
+     - if the two sessions would overlap, the morning ends where the evening
+       begins; if even that cannot fit, all four times go back to defaults.
+   Every adjustment is a warning, so a typo is visible on /exec and in
+   ?debug=1 rather than silently moving her pills. */
+function medsResolveTimes(s, parseMin) {
+  var D = { amStart: 570, amEnd: 840, pmStart: 1230, pmEnd: 1439, step: 10 };
+  var LAST = 1439, STAGES = 4, warn = [];
+  s = s || {};
+  function raw(k) { var v = s[k]; return v == null ? '' : String(v).trim(); }
+  function hm(m) {
+    var h = Math.floor(m / 60), mi = m % 60;
+    return (h % 12 || 12) + ':' + (mi < 10 ? '0' : '') + mi + (h < 12 ? ' AM' : ' PM');
+  }
+  function onOff(k, name) {
+    var v = raw(k).toLowerCase();
+    if (v === '' || v === 'on') return true;
+    if (v === 'off') return false;
+    warn.push(name + ' "' + raw(k) + '" not understood (use on or off) - using on');
+    return true;
+  }
+  function clock(k, name, def, isEnd) {
+    var v = raw(k);
+    if (!v) return def;
+    var n = /^midnight$/i.test(v) ? 0 : parseMin(v);
+    if (n === null || n === undefined) {
+      warn.push(name + ' "' + v + '" not understood - using ' + hm(def));
+      return def;
+    }
+    if (isEnd && n === 0) {
+      warn.push(name + ' "' + v + '": a session cannot run past midnight (check-ins reset then) - using 11:59 PM');
+      return LAST;
+    }
+    return n;
+  }
+  var step = D.step, rs = raw('medsstepmin');
+  if (rs) {
+    var n = parseFloat(rs);
+    if (!isFinite(n) || n <= 0) {
+      warn.push('medsStepMin "' + rs + '" not understood - using ' + D.step);
+    } else {
+      step = Math.round(n);
+      if (step < 1) step = 1;
+      if (step > 60) step = 60;
+      if (step !== n) warn.push('medsStepMin "' + rs + '" - using ' + step);
+    }
+  }
+  function fit(name, on, start, end) {
+    if (start + STAGES * step > LAST) {
+      var ns = LAST - STAGES * step;
+      warn.push(name + 'Start ' + hm(start) + ' leaves no room for four stages before midnight - using ' + hm(ns));
+      start = ns;
+    }
+    var minEnd = start + STAGES * step;
+    if (end < minEnd) {
+      warn.push(name + 'End ' + hm(end) + ' is before the last stage has had ' + step + ' minutes - using ' + hm(minEnd));
+      end = minEnd;
+    }
+    return { on: on, start: start, end: end };
+  }
+  var amOn = onOff('medsmorning', 'medsMorning'), pmOn = onOff('medsevening', 'medsEvening');
+  var am = fit('medsAm', amOn, clock('medsamstart', 'medsAmStart', D.amStart, false),
+                              clock('medsamend', 'medsAmEnd', D.amEnd, true));
+  var pm = fit('medsPm', pmOn, clock('medspmstart', 'medsPmStart', D.pmStart, false),
+                              clock('medspmend', 'medsPmEnd', D.pmEnd, true));
+  if (am.on && pm.on && am.start < pm.end && pm.start < am.end) {
+    if (am.start < pm.start && am.start + STAGES * step <= pm.start) {
+      warn.push('medsAmEnd ' + hm(am.end) + ' runs into the evening session - morning ends at ' + hm(pm.start));
+      am.end = pm.start;
+    } else {
+      warn.push('the morning and evening sessions overlap - using the default times for both');
+      am = fit('medsAm', amOn, D.amStart, D.amEnd);
+      pm = fit('medsPm', pmOn, D.pmStart, D.pmEnd);
+    }
+  }
+  return { step: step, am: am, pm: pm, warnings: warn };
+}
+/* MEDS-TIMES-END */
+
+/** Same clock parser shape the board uses: "9:30 am" -> 570, else null. */
+function parseClockMin(v) {
+  var c = parseClock(v);
+  return c ? c.h * 60 + c.m : null;
+}
+
+function medsTimeWarnings(out) {
+  try {
+    var r = medsResolveTimes(out.settings, parseClockMin);
+    for (var i = 0; i < r.warnings.length; i++) out.warnings.push('meds: ' + r.warnings[i]);
+  } catch (err) {
+    out.warnings.push('meds times: ' + String((err && err.message) || err));
   }
 }
 
