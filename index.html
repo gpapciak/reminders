@@ -1542,6 +1542,15 @@ const MEDS_DONE_MS = 60*1000;
    endpoint's ?lite=1 read, which touches only the Log tab. See OPERATIONS.md
    for the runtime arithmetic. */
 const MEDS_POLL_MS = 40*1000;
+/* ...and Settings, during a session, at least this often. The lite read does
+   not carry Settings, so without this a family member switching meds off (or
+   moving a time) mid-session waited for the 3-minute full read — and if that
+   read landed while a lite one was in flight, loadData() skipped it and the
+   wait became 6 minutes, while a button press cleared the screen in under
+   one. So while a session is up, the fast poll does a FULL read whenever the
+   last good one is this old, and lite in between. Found 2026-11-13 when "off"
+   seemed to need the buttons pressed to take effect. */
+const MEDS_SETTINGS_MS = 90*1000;
 /* How old the log may be before a pill instruction is withheld. Three fast
    polls: long enough that the ordinary jitter of a 40s poll plus a 4-8s
    endpoint never trips it, short enough that a board which has quietly
@@ -4286,16 +4295,19 @@ setInterval(loadData,refreshMs());     /* 120s on the table, 3 min elsewhere */
    up and not yet complete — most days that is 10-30 minutes. Ticks every 10s
    but asks the endpoint only when today's log is at least MEDS_POLL_MS old
    AND the last attempt was that long ago, so a failing endpoint is asked
-   every 40s, not every 10. Uses the cheap ?lite=1 read; the full read above
-   keeps its own cadence alongside. */
+   every 40s, not every 10. Uses the cheap ?lite=1 read, except when the last
+   good FULL read is MEDS_SETTINGS_MS old — then a full one, so a Settings
+   change (meds off, a new time) lands within ~2 minutes mid-session even if
+   the 3-minute interval above collided with a lite read or failed. */
 setInterval(function(){
   if(DEMO) return;
   const now=deviceNow(), st=medsStatus(now,isoLA(now));
   if(!st||st.done) return;
-  if(logRow&&Date.now()-logRow.at<MEDS_POLL_MS) return;
+  const settingsOld=Date.now()-lastOkAt>=MEDS_SETTINGS_MS;
+  if(!settingsOld&&logRow&&Date.now()-logRow.at<MEDS_POLL_MS) return;
   if(Date.now()-medsLastPollAt<MEDS_POLL_MS) return;
   medsLastPollAt=Date.now();
-  loadData(true);
+  loadData(!settingsOld);
 },10*1000);
 setInterval(paint,60*1000);   /* lets the staleness note appear on its own */
 setInterval(debugPaint,1000); /* no-op without ?debug=1                   */

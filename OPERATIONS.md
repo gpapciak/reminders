@@ -295,7 +295,11 @@ which change a few times a week.
 and not yet cleared, **every** screen polls for check-ins every 40s, so the
 screen clears soon after she taps. Those polls use `?lite=1`, a separate branch
 of `doGet` that reads only the `Log` tail (no `Days`, `Events`, `Media`,
-`Settings`, no heartbeat). The full read keeps its normal cadence alongside.
+`Settings`, no heartbeat). The full read keeps its normal cadence alongside,
+and during a session the fast poll also makes a full read whenever the last
+good one is ≥90s old (`MEDS_SETTINGS_MS`). That way a Settings change such as
+`meds` = `off` lands within ~2 minutes mid-session. It adds about one full
+read per 3 minutes per screen while a session is up, ~20 calls on a typical day.
 The poll is checked every 10s and fires once the log is ≥40s old, so the
 measured cadence in headless testing was **one lite call every ~50s**
 (≈1.2/min/screen). It stops the moment both kinds are logged or the window
